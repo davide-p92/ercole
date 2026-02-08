@@ -2,7 +2,8 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import matter from "gray-matter";
-import Database from "better-sqlite3";
+//import Database from "better-sqlite3";
+import { SQLiteDB } from "./sqlite-wrapper";
 import { NOTES_DIR } from "./_paths";
 import { openDb, initSchema } from "./init-db";
 
@@ -88,7 +89,7 @@ function parseNote(fileAbsPath: string): IndexedNote {
 	};
 }
 
-function reindex(db: Database.Database) {
+function reindex(db: SQLiteDB) {
 	initSchema(db);
 
 	const files = walk(NOTES_DIR);
@@ -100,64 +101,52 @@ function reindex(db: Database.Database) {
 		if (seen.has(n.id)) throw new Error(`Duplicate note id: ${n.id}`);
 		seen.add(n.id);
 	}
+	
+  // Clear existing data
+  db.exec("DELETE FROM note_tags;");
+  db.exec("DELETE FROM note_links;");
+  db.exec("DELETE FROM notes_content;");
+  db.exec("DELETE FROM notes;");
 
-	const tx = db.transaction(() => {
-		// "Full rebuild" of cache (DB derivable)
-		db.exec("DELETE FROM note_tags;");
-		db.exec("DELETE FROM  note_links;");
-		db.exec("DELETE FROM notes_fts;");
-		db.exec("DELETE FROM notes;");
+  // Insert new data
+  for (const n of notes) {
+    // Insert note
+    db.run(
+      `INSERT INTO notes (id, path, title, created, updated, content_hash) VALUES (?, ?, ?, ?, ?, ?)`,
+      [n.id, n.relPath, n.title, n.created, n.updated, n.contentHash]
+    );
 
-		const insertNote = db.prepare(`
-			INSERT INTO notes (id, path, title, created, updated, content_hash)
-			VALUES (@id, @path, @title, @created, @updated, @content_hash);
-		`);
-		const insertTag = db.prepare(`
-			INSERT INTO note_tags (note_id, tag) VALUES (?, ?);
-		`);
-		const insertLink = db.prepare(`
-			INSERT INTO note_links (from_id, to_id) VALUES (?, ?);
-		`);
-		const insertFts = db.prepare(`
-			INSERT INTO notes_fts (note_id, content) VALUES (?, ?);
-		`);
+    // Insert tags
+    for (const tag of n.tags) {
+      db.run(`INSERT INTO note_tags (note_id, tag) VALUES (?, ?)`, [n.id, tag]);
+    }
 
-		for (const n of notes) {
-			insertNote.run({
-				id: n.id,
-				path: n.relPath,
-				title: n.title,
-				created: n.created,
-				updated: n.updated,
-				content_hash: n.contentHash,
-			});
-			
-			for (const tag of n.tags)
-				insertTag.run(n.id, tag);
-			for (const toId of n.links)
-				insertLink.run(n.id, toId);
+    // Insert links
+    for (const toId of n.links) {
+      db.run(`INSERT INTO note_links (from_id, to_id) VALUES (?, ?)`, [n.id, toId]);
+    }
 
-			// Indicizza il testo
-			insertFts.run(n.id, n.content);
-		}
-	});
+    // Insert content for search
+    db.run(`INSERT INTO notes_content (note_id, content) VALUES (?, ?)`, [n.id, n.content]);
+  }
 
-	tx();
-
-	return { count: notes.length };
+  return { count: notes.length };
 }
 
 if (require.main === module) {
-	const db = openDb();
-	try {
-		const { count } = reindex(db);
-		console.log(`Reindex OK. Notes indexed: ${count}`);
-	} catch(err) {
-		console.error("Reindex failed:");
-		console.error(err);
-		process.exitCode = 1;
-	} finally {
-		db.close();
-	}
+  (async () => {
+    const db = await openDb();
+    try {
+      const { count } = reindex(db);
+      console.log(`Reindex OK. Notes indexed: ${count}`);
+    } catch(err) {
+      console.error("Reindex failed:");
+      console.error(err);
+      process.exitCode = 1;
+    } finally {
+      await db.close();
+    }
+  })();
 }
+
 			

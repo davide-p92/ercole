@@ -1,73 +1,87 @@
-import fs from "fs";
-import Database from "better-sqlite3";
-import { APP_DIR, DB_PATH } from "./_paths";
+// scripts/init-db.ts
+import { openDb } from './wasm-sqlite-wrapper';
+import path from 'path';
 
-export function openDb() {
-	fs.mkdirSync(APP_DIR, { recursive: true });
-	const db = new Database(DB_PATH);
+const DB_PATH = path.resolve(__dirname, '../notes.db');
 
-	// Good practices for SQLite local
-	db.pragma("journal_mode = WAL");
-	db.pragma("synchronous = NORMAL");
-	db.pragma("foreign_keys = ON");
-
-	return db;
+export async function initSchema(db: any): Promise<void> {
+  console.log('Creating database schema...');
+  
+  // Enable foreign keys
+  db.exec("PRAGMA foreign_keys = ON");
+  
+  // Create notes table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notes (
+      id TEXT PRIMARY KEY,
+      path TEXT NOT NULL,
+      title TEXT NOT NULL,
+      created TEXT NOT NULL,
+      updated TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      UNIQUE(id)
+    )
+  `);
+  
+  // Create tags table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS note_tags (
+      note_id TEXT NOT NULL,
+      tag TEXT NOT NULL,
+      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
+      UNIQUE(note_id, tag)
+    )
+  `);
+  
+  // Create links table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS note_links (
+      from_id TEXT NOT NULL,
+      to_id TEXT NOT NULL,
+      FOREIGN KEY (from_id) REFERENCES notes(id) ON DELETE CASCADE,
+      UNIQUE(from_id, to_id)
+    )
+  `);
+  
+  // Create FTS5 virtual table for full-text search
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+      note_id UNINDEXED,
+      content,
+      tokenize = 'porter unicode61'
+    )
+  `);
+  
+  console.log('✅ Database schema created');
 }
 
-export function initSchema(db: Database.Database) {
-	// Main tables
-	db.exec(`
-		CREATE TABLE IF NOT EXISTS notes (
-			id TEXT PRIMARY KEY,
-			path TEXT NOT NULL UNIQUE,
-			title TEXT NOT NULL,
-			created TEXT NOT NULL,
-			updated TEXT NOT NULL,
-			content_hash TEXT NOT NULL
-		);
-
-		CREATE TABLE IF NOT EXISTS note_tags (
-			note_id TEXT NOT NULL,
-			tag TEXT NOT NULL,
-			PRIMARY KEY (note_id, tag),
-			FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
-		);
-
-		CREATE TABLE IF NOT EXISTS note_links (
-			from_id TEXT NOT NULL,
-			to_id TEXT NOT NULL,
-			PRIMARY KEY (from_id, to_id),
-			FOREIGN KEY (from_id) REFERENCES notes(id) ON DELETE CASCADE
-			-- to_id may refer to not yet present notes; we keep it free for now
-		);
-	`);
-	
-	// FTS5 (indexed content separated from table notes for simplicity/robustness
-	// note_id is the "key" binding FTS -> notes
-	db.exec(`
-		CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
-			note_id,
-			content,
-			tokenize = 'unicode61'
-		);
-	`);
-
-	// Useful indexes
-	db.exec(`
-		CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated);
-		CREATE INDEX IF NOT EXISTS idx_note_tags_tag ON note_tags(tag);
-		CREATE INDEX IF NOT EXISTS idx_note_links_from ON note_links(from_id);
-		CREATE INDEX IF NOT EXISTS idx_note_links_to ON note_links(to_id);
-	`);
+// Self-executing when run directly
+if (require.main === module) {
+  (async () => {
+    try {
+      console.log(`Initializing database at ${DB_PATH}...`);
+      
+      const db = await openDb();
+      await initSchema(db);
+      
+      // Test the schema
+      const tables = db.all(`
+        SELECT name FROM sqlite_master 
+        WHERE type='table' 
+        ORDER BY name
+      `);
+      
+      console.log('\nDatabase tables created:');
+      tables.forEach((table: any) => {
+        console.log(`  - ${table.name}`);
+      });
+      
+      await db.close();
+      console.log(`\n✅ Database initialized successfully at ${DB_PATH}`);
+      
+    } catch (error) {
+      console.error('❌ Database initialization failed:', error);
+      process.exit(1);
+    }
+  })();
 }
-
-if (require.main == module) {
-	const db = openDb();
-	try {
-		initSchema(db);
-		console.log(`DB initialized at ${DB_PATH}`);
-	} finally {
-		db.close();
-	}
-}
-

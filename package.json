@@ -2,23 +2,17 @@
   "name": "ercole",
   "private": true,
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
   "scripts": {
-    "init-db": "ts-node scripts/init-db.ts",
-    "index": "ts-node scripts/reindex.ts",
-    "search": "ts-node scripts/search.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "index-db": "ts-node scripts/json-db.ts index",
+    "search-db": "ts-node scripts/json-db.ts search",
+    "list-db": "ts-node scripts/json-db.ts list",
+    "stats-db": "ts-node scripts/json-db.ts stats"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "packageManager": "pnpm@10.29.1",
+  "dependencies": {
+    "gray-matter": "^4.0.3"
+  },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.2.2",
-    "better-sqlite3": "^12.6.2",
-    "gray-matter": "^4.0.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
