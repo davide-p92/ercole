@@ -3,12 +3,14 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "index-db": "ts-node scripts/json-db.ts index",
-    "search-db": "ts-node scripts/json-db.ts search",
-    "list-db": "ts-node scripts/json-db.ts list",
-    "stats-db": "ts-node scripts/json-db.ts stats"
+    "index-db": "ts-node scripts/db.ts index",
+    "search-db": "ts-node scripts/db.ts search",
+    "list-db": "ts-node scripts/db.ts list",
+    "stats-db": "ts-node scripts/db.ts stats",
+    "watch-db": "ts-node scripts/watch.ts"
   },
   "dependencies": {
+    "chokidar": "^5.0.0",
     "gray-matter": "^4.0.3"
   },
   "devDependencies": {

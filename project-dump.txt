@@ -1,0 +1,2549 @@
+=== PROJECT EXPORT ===
+Root: "/workspaces/codespaces-blank/ercole"
+
+
+========================================
+FILE: test-sqlite.js
+----------------------------------------
+const Database = require('better-sqlite3');
+
+try {
+  const db = new Database(':memory:');
+  const result = db.prepare('SELECT 1 + 1 as sum').get();
+  console.log('✅ SQLite test passed:', result);
+  db.close();
+} catch (error) {
+  console.error('❌ SQLite test failed:', error.message);
+  console.error('Full error:', error);
+}
+
+========================================
+FILE: test-sqlite-correct.js
+----------------------------------------
+// test-sqlite-correct.js
+async function testSQLiteWASM() {
+  try {
+    console.log('Testing SQLite WASM (correct way)...');
+    
+    // The default export is a function that initializes SQLite
+    const initSQLite = (await import('@sqlite.org/sqlite-wasm')).default;
+    
+    // Initialize SQLite
+    const sqlite3 = await initSQLite({
+      // Optional: print and error handlers
+      print: console.log,
+      printErr: console.error,
+    });
+    
+    console.log('SQLite version:', sqlite3.version.libVersion);
+    
+    // Create an in-memory database
+    const db = new sqlite3.oo1.DB(':memory:');
+    
+    // Create a table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS test (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Insert data
+    db.exec(`
+      INSERT INTO test (name) VALUES ('Alice');
+      INSERT INTO test (name) VALUES ('Bob');
+      INSERT INTO test (name) VALUES ('Charlie');
+    `);
+    
+    // Query data
+    const result = db.exec(`
+      SELECT * FROM test ORDER BY name
+    `, { returnValue: 'resultRows' });
+    
+    console.log('Query result:', result);
+    
+    // Get row count
+    const count = db.exec(`
+      SELECT COUNT(*) as count FROM test
+    `, { returnValue: 'resultRows' });
+    
+    console.log('Total rows:', count[0].count);
+    
+    // Close database
+    db.close();
+    
+    console.log('✅ SQLite WASM test passed!');
+    return true;
+    
+  } catch (error) {
+    console.error('❌ SQLite WASM test failed:', error);
+    console.error('Full error:', error.stack || error);
+    return false;
+  }
+}
+
+// Run the test
+testSQLiteWASM();
+
+========================================
+FILE: packageOLD.json
+----------------------------------------
+{
+  "name": "ercole",
+  "private": true,
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "init-db": "ts-node scripts/init-db.ts",
+    "index-db": "ts-node scripts/reindex.ts",
+    "search-db": "ts-node scripts/search.ts",
+    "test-sqlite": "ts-node scripts/wasm-sqlite-wrapper.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.29.1",
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.2.2",
+    "@types/sql.js": "^1.4.9",
+    "gray-matter": "^4.0.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@sqlite.org/sqlite-wasm": "^3.51.2-build6",
+    "better-sqlite3": "8.5.0",
+    "sql.js": "^1.13.0",
+    "sqlite": "^5.1.1",
+    "sqljs": "0.0.0-6"
+  }
+}
+
+========================================
+FILE: tsconfig.json
+----------------------------------------
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "./dist",
+    "rootDir": "./"
+  },
+  "include": ["scripts/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
+
+========================================
+FILE: test-wasm-sqlite.ts
+----------------------------------------
+const fs = require('fs');
+
+// Test sqlite-wasm without TypeScript complications
+async function testWasmSQLite() {
+  try {
+    console.log('Testing SQLite WASM...');
+    
+    // Dynamically import
+    const sqlite3 = await import('@sqlite.org/sqlite-wasm');
+    console.log('SQLite version:', sqlite3.version.libVersion);
+    
+    // Create in-memory database
+    const db = new sqlite3.oo1.DB(':memory:');
+    
+    // Create a table
+    db.exec('CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)');
+    
+    // Insert data
+    db.exec('INSERT INTO test (name) VALUES ("test1"), ("test2")');
+    
+    // Query data
+    const results = db.exec('SELECT * FROM test', { returnValue: 'resultRows' });
+    console.log('Query results:', results);
+    
+    // Cleanup
+    db.close();
+    
+    console.log('✅ SQLite WASM test passed!');
+    return true;
+  } catch (error) {
+    console.error('❌ SQLite WASM test failed:', error);
+    return false;
+  }
+}
+
+// Run test
+testWasmSQLite();
+
+========================================
+FILE: project-dump.txt
+----------------------------------------
+
+========================================
+FILE: .gitignore
+----------------------------------------
+test*
+packageOLD.json
+tsconfigOLD.json
+
+========================================
+FILE: proj_exp.cpp
+----------------------------------------
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <unordered_set>
+#include <vector>
+
+namespace fs = std::filesystem;
+
+// Heuristics: quali estensioni considerare "testo"
+bool looks_text_file(const fs::path& p) {
+    static const std::unordered_set<std::string> exts = {
+        ".txt", ".md", ".markdown", ".json", ".js",  ".mjs", ".cjs",
+        ".ts",  ".tsx", ".css",     ".scss", ".html", ".xml",
+        ".c",   ".h",   ".cpp",     ".hpp",  ".cc",   ".hh",
+        ".ino", ".py",  ".sh",      ".yml",  ".yaml", ".toml",
+        ".env", ".conf", ".ini",    ".cfg",  ".gradle", ".properties"
+    };
+    auto ext = p.extension().string();
+    return exts.count(ext) > 0 || ext.empty(); // anche file senza estensione (spesso testo)
+}
+
+// Split semplice su virgola
+std::vector<std::string> split_csv(const std::string& s) {
+    std::vector<std::string> out;
+    std::stringstream ss(s);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+        if (!item.empty()) out.push_back(item);
+    }
+    return out;
+}
+
+int main(int argc, char* argv[]) {
+    // --- Parametri di default ---
+    fs::path root = fs::current_path();
+    std::size_t max_total_lines = 3000;      // limite globale
+    std::size_t max_per_file_lines = 0;      // 0 = illimitato per file
+    std::unordered_set<std::string> exclude_dirs = {
+        "node_modules", ".git", "dist", "build", "out", "coverage"
+    };
+
+    // --- Parsing argomenti molto semplice ---
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+
+        if ((arg == "--root" || arg == "-r") && i + 1 < argc) {
+            root = fs::path(argv[++i]);
+            continue;
+        }
+        if (arg.rfind("--max-lines", 0) == 0) {
+            // accetta sia "--max-lines 2500" che "--max-lines=2500"
+            std::string val;
+            if (arg.find('=') != std::string::npos) val = arg.substr(arg.find('=') + 1);
+            else if (i + 1 < argc) val = argv[++i];
+            if (!val.empty()) max_total_lines = static_cast<std::size_t>(std::stoul(val));
+            continue;
+        }
+        if (arg.rfind("--per-file-lines", 0) == 0) {
+            std::string val;
+            if (arg.find('=') != std::string::npos) val = arg.substr(arg.find('=') + 1);
+            else if (i + 1 < argc) val = argv[++i];
+            if (!val.empty()) max_per_file_lines = static_cast<std::size_t>(std::stoul(val));
+            continue;
+        }
+        if ((arg == "--exclude" || arg == "-x") && i + 1 < argc) {
+            for (auto& d : split_csv(argv[++i])) exclude_dirs.insert(d);
+            continue;
+        }
+        if (arg == "-h" || arg == "--help") {
+            std::cout <<
+                "Usage: project_exporter [--root PATH] [--max-lines N] [--per-file-lines N] "
+                "[--exclude dir1,dir2,...]\n";
+            return 0;
+        }
+    }
+
+    if (!fs::exists(root) || !fs::is_directory(root)) {
+        std::cerr << "Errore: '" << root.string()
+                  << "' non esiste o non è una directory.\n";
+        return 1;
+    }
+
+    std::ofstream out("project-dump.txt");
+    if (!out) {
+        std::cerr << "Errore: impossibile creare 'project-dump.txt'.\n";
+        return 1;
+    }
+
+    out << "=== PROJECT EXPORT ===\n";
+    out << "Root: " << root << "\n\n";
+
+    std::size_t total_lines = 0;
+    std::error_code ec;
+
+    fs::recursive_directory_iterator it(
+        root, fs::directory_options::skip_permission_denied, ec),
+        end;
+
+    for (; it != end; it.increment(ec)) {
+        if (ec) { ec.clear(); continue; }
+
+        const fs::directory_entry& entry = *it;
+        const fs::path path = entry.path();
+
+        // Esclusione directory: disabilita la discesa ricorsiva
+        if (entry.is_directory(ec)) {
+            std::string name = path.filename().string();
+            if (exclude_dirs.count(name)) {
+                it.disable_recursion_pending(); // <-- chiave per NON entrare
+            }
+            continue; // non stampiamo directory
+        }
+
+        if (!entry.is_regular_file(ec)) continue;
+        if (!looks_text_file(path)) continue;
+
+        // Stop se raggiunto limite globale
+        if (total_lines >= max_total_lines && max_total_lines > 0) break;
+
+        auto rel = fs::relative(path, root, ec);
+        if (ec) { rel = path; ec.clear(); }
+
+        out << "\n========================================\n";
+        out << "FILE: " << rel.string() << "\n";
+        out << "----------------------------------------\n";
+
+        std::ifstream in(path);
+        if (!in) {
+            out << "[Impossibile leggere il file]\n";
+            continue;
+        }
+
+        std::string line;
+        std::size_t per_file_count = 0;
+
+        while (std::getline(in, line)) {
+            if (max_total_lines > 0 && total_lines >= max_total_lines) break;
+            if (max_per_file_lines > 0 && per_file_count >= max_per_file_lines) {
+                out << "[… tronco per limite per-file (" << max_per_file_lines << " righe)]\n";
+                break;
+            }
+            out << line << "\n";
+            ++total_lines;
+            ++per_file_count;
+        }
+
+        if (max_total_lines > 0 && total_lines >= max_total_lines) {
+            out << "\n[*** ESPORTAZIONE INTERROTTA: raggiunto limite totale di "
+                << max_total_lines << " righe ***]\n";
+            break;
+        }
+    }
+
+    std::cout << "✔ Esportazione completata: project-dump.txt ("
+              << total_lines << " righe)\n";
+    return 0;
+}
+
+========================================
+FILE: scripts/db-wasm.ts
+----------------------------------------
+import { WasmSQLiteDB, openDb } from './wasm-db';
+import path from 'path';
+
+const DB_PATH = path.resolve(__dirname, '../notes.db');
+
+export async function initSchema(db: WasmSQLiteDB): Promise<void> {
+  console.log('Creating database schema...');
+  
+  // Create main notes table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notes (
+      id TEXT PRIMARY KEY,
+      path TEXT NOT NULL,
+      title TEXT NOT NULL,
+      created TEXT NOT NULL,
+      updated TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      UNIQUE(id)
+    )
+  `);
+  
+  // Create tags table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS note_tags (
+      note_id TEXT NOT NULL,
+      tag TEXT NOT NULL,
+      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
+      UNIQUE(note_id, tag)
+    )
+  `);
+  
+  // Create links table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS note_links (
+      from_id TEXT NOT NULL,
+      to_id TEXT NOT NULL,
+      FOREIGN KEY (from_id) REFERENCES notes(id) ON DELETE CASCADE,
+      UNIQUE(from_id, to_id)
+    )
+  `);
+  
+  // Create search table (simple LIKE-based search)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS note_content (
+      note_id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+    )
+  `);
+  
+  // Create indexes for better performance
+  db.exec('CREATE INDEX IF NOT EXISTS idx_note_tags_note_id ON note_tags(note_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_note_links_from_id ON note_links(from_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_note_content_content ON note_content(content)');
+  
+  console.log('Database schema created successfully');
+}
+
+// Self-executing when run directly
+if (require.main === module) {
+  (async () => {
+    try {
+      const db = await openDb();
+      await initSchema(db);
+      console.log(`✅ Database initialized at ${DB_PATH}`);
+      await db.close();
+    } catch (error) {
+      console.error('❌ Database initialization failed:', error);
+      process.exit(1);
+    }
+  })();
+}
+
+========================================
+FILE: scripts/index-notes.ts
+----------------------------------------
+import * as fs from "fs";
+import * as path from "path";
+const matter = require("gray-matter");
+
+const NOTES_DIR = path.resolve(__dirname, "../notes");
+
+type NoteIndex = {
+	id: string;
+	title: string;
+	path: string;
+	created: string;
+	updated: string;
+};
+
+function walk(dir: string): string[] {
+	const entries = fs.readdirSync(dir, { withFileTypes: true});
+	return entries.flatMap((entry) => {
+		const fullPath = path.join(dir, entry.name);
+		if (entry.isDirectory()) return walk(fullPath);
+		if (entry.isFile() && entry.name.endsWith(".md")) return [fullPath];
+		return [];
+	});
+}
+
+function indexNotes(): NoteIndex[] {
+	const files = walk(NOTES_DIR);
+	const seenIds = new Set<string>();
+	const index: NoteIndex[] = [];
+
+	for (const file of files) {
+		const raw = fs.readFileSync(file, "utf8");
+		const parsed = matter(raw);
+		const data = parsed.data as Partial<NoteIndex>;
+		
+		// Minimal validations
+		if (!data.id) {
+			throw new Error(`Duplicate id '${file}`);
+		}
+		if (seenIds.has(data.id)) {
+			throw new Error(`Missing required fields in ${file}`);
+		}
+		if (!data.title || !data.created || !data.updated) {
+			throw new Error(`Missing required fields in ${file}`);
+		}
+
+		seenIds.add(data.id);
+
+		index.push({
+			id: data.id,
+			title: data.title,
+			created: data.created,
+			updated: data.updated,
+			path: path.relative(NOTES_DIR, file),
+		});
+	}
+
+	return index;
+}
+
+// ---- run ----
+try {
+	const notes = indexNotes();
+	console.log("Indexed notes:");
+	for (const note of notes) {
+		console.log(`- [${note.id}] ${note.title} (${note.path})`);
+	}
+	console.log(`\nTotal notes: ${notes.length}`);
+} catch (err) {
+	console.error("Indexing failed:");
+	console.error(err);
+	process.exit(1);
+}
+
+========================================
+FILE: scripts/sqlite-wrapper.ts
+----------------------------------------
+import fs from 'fs';
+import path from 'path';
+import initSqlJs, { Database as SqlJsDatabase, QueryExecResult } from 'sql.js';
+
+export class SQLiteDB {
+  private db: SqlJsDatabase | null = null;
+  private dbPath: string;
+
+  constructor(dbPath: string = './notes.db') {
+    this.dbPath = path.resolve(process.cwd(), dbPath);
+  }
+
+  async open(): Promise<void> {
+    if (this.db) return;
+
+    try {
+      const SQL = await initSqlJs();
+      
+      if (fs.existsSync(this.dbPath)) {
+        const fileBuffer = fs.readFileSync(this.dbPath);
+        this.db = new SQL.Database(fileBuffer);
+      } else {
+        this.db = new SQL.Database();
+        // Initialize with default pragmas
+        this.exec(`
+          PRAGMA journal_mode = WAL;
+          PRAGMA synchronous = NORMAL;
+          PRAGMA foreign_keys = ON;
+        `);
+      }
+    } catch (error) {
+      console.error('Failed to open database:', error);
+      throw error;
+    }
+  }
+
+  async close(): Promise<void> {
+    if (this.db) {
+      // Save to file
+      const data = this.db.export();
+      const buffer = Buffer.from(data);
+      fs.writeFileSync(this.dbPath, buffer);
+      
+      this.db.close();
+      this.db = null;
+    }
+  }
+
+  exec(sql: string): void {
+    if (!this.db) throw new Error('Database not open');
+    this.db.exec(sql);
+  }
+
+  run(sql: string, params: any[] = []): { changes: number; lastInsertRowid: number | null } {
+    if (!this.db) throw new Error('Database not open');
+    const stmt = this.db.prepare(sql);
+    stmt.run(params);
+    const changes = this.db.getRowsModified();
+    
+    // Get last insert rowid - handle potential null/undefined
+    let lastInsertRowid: number | null = null;
+    try {
+      const result: QueryExecResult[] = this.db.exec("SELECT last_insert_rowid()");
+      if (result && result.length > 0 && result[0] && result[0].values && result[0].values.length > 0 && result[0].values[0].length > 0) {
+        const value = result[0].values[0][0];
+        if (typeof value === 'number') {
+          lastInsertRowid = value;
+        }
+      }
+    } catch (error) {
+      // Ignore if we can't get last insert rowid
+    }
+    
+    stmt.free();
+    return { changes, lastInsertRowid };
+  }
+
+  all(sql: string, params: any[] = []): any[] {
+    if (!this.db) throw new Error('Database not open');
+    const stmt = this.db.prepare(sql);
+    const results: any[] = [];
+    stmt.bind(params);
+    while (stmt.step()) {
+      results.push(stmt.getAsObject());
+    }
+    stmt.free();
+    return results;
+  }
+
+  get(sql: string, params: any[] = []): any {
+    if (!this.db) throw new Error('Database not open');
+    const stmt = this.db.prepare(sql);
+    stmt.bind(params);
+    const result = stmt.step() ? stmt.getAsObject() : null;
+    stmt.free();
+    return result;
+  }
+
+  prepare(sql: string): {
+    run: (params?: any[]) => void;
+    all: (params?: any[]) => any[];
+    get: (params?: any[]) => any;
+    finalize: () => void;
+  } {
+    if (!this.db) throw new Error('Database not open');
+    const stmt = this.db.prepare(sql);
+    
+    return {
+      run: (params = []) => {
+        stmt.run(params);
+      },
+      all: (params = []) => {
+        stmt.bind(params);
+        const results: any[] = [];
+        while (stmt.step()) {
+          results.push(stmt.getAsObject());
+        }
+        stmt.reset();
+        return results;
+      },
+      get: (params = []) => {
+        stmt.bind(params);
+        const result = stmt.step() ? stmt.getAsObject() : null;
+        stmt.reset();
+        return result;
+      },
+      finalize: () => {
+        stmt.free();
+      }
+    };
+  }
+}
+
+========================================
+FILE: scripts/init-db.ts
+----------------------------------------
+// scripts/init-db.ts
+import { openDb } from './wasm-sqlite-wrapper';
+import path from 'path';
+
+const DB_PATH = path.resolve(__dirname, '../notes.db');
+
+export async function initSchema(db: any): Promise<void> {
+  console.log('Creating database schema...');
+  
+  // Enable foreign keys
+  db.exec("PRAGMA foreign_keys = ON");
+  
+  // Create notes table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notes (
+      id TEXT PRIMARY KEY,
+      path TEXT NOT NULL,
+      title TEXT NOT NULL,
+      created TEXT NOT NULL,
+      updated TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      UNIQUE(id)
+    )
+  `);
+  
+  // Create tags table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS note_tags (
+      note_id TEXT NOT NULL,
+      tag TEXT NOT NULL,
+      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
+      UNIQUE(note_id, tag)
+    )
+  `);
+  
+  // Create links table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS note_links (
+      from_id TEXT NOT NULL,
+      to_id TEXT NOT NULL,
+      FOREIGN KEY (from_id) REFERENCES notes(id) ON DELETE CASCADE,
+      UNIQUE(from_id, to_id)
+    )
+  `);
+  
+  // Create FTS5 virtual table for full-text search
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+      note_id UNINDEXED,
+      content,
+      tokenize = 'porter unicode61'
+    )
+  `);
+  
+  console.log('✅ Database schema created');
+}
+
+// Self-executing when run directly
+if (require.main === module) {
+  (async () => {
+    try {
+      console.log(`Initializing database at ${DB_PATH}...`);
+      
+      const db = await openDb();
+      await initSchema(db);
+      
+      // Test the schema
+      const tables = db.all(`
+        SELECT name FROM sqlite_master 
+        WHERE type='table' 
+        ORDER BY name
+      `);
+      
+      console.log('\nDatabase tables created:');
+      tables.forEach((table: any) => {
+        console.log(`  - ${table.name}`);
+      });
+      
+      await db.close();
+      console.log(`\n✅ Database initialized successfully at ${DB_PATH}`);
+      
+    } catch (error) {
+      console.error('❌ Database initialization failed:', error);
+      process.exit(1);
+    }
+  })();
+}
+
+========================================
+FILE: scripts/json-db.ts
+----------------------------------------
+// scripts/json-db.ts
+import fs from 'fs';
+import path from 'path';
+import matter from 'gray-matter';
+import crypto from 'crypto';
+
+const NOTES_DIR = path.resolve(__dirname, '../notes');
+const INDEX_PATH = path.resolve(__dirname, '../notes-index.json');
+
+type Note = {
+  id: string;
+  path: string;
+  title: string;
+  created: string;
+  updated: string;
+  tags: string[];
+  links: string[];
+  content: string;
+  content_hash: string;
+};
+
+type TagStats = {
+  tag: string;
+  count: number;
+};
+
+type DatabaseStats = {
+  totalNotes: number;
+  totalTags: number;
+  totalWords: number;
+  topTags: TagStats[];
+};
+
+class JSONDatabase {
+  private notes: Map<string, Note> = new Map();
+  private tagsIndex: Map<string, Set<string>> = new Map();
+  private contentIndex: Map<string, string> = new Map(); // For fast search
+
+  load(): void {
+    if (fs.existsSync(INDEX_PATH)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8'));
+        this.notes.clear();
+        this.tagsIndex.clear();
+        this.contentIndex.clear();
+
+        data.forEach((note: Note) => {
+          this.notes.set(note.id, note);
+          
+          // Index tags
+          note.tags.forEach((tag: string) => {
+            if (!this.tagsIndex.has(tag)) {
+              this.tagsIndex.set(tag, new Set());
+            }
+            const tagSet = this.tagsIndex.get(tag);
+            if (tagSet) {
+              tagSet.add(note.id);
+            }
+          });
+          
+          // Index content for search
+          this.contentIndex.set(note.id, note.content.toLowerCase());
+        });
+
+        console.log(`Loaded ${this.notes.size} notes from index`);
+      } catch (error) {
+        console.error('Failed to load index:', error);
+      }
+    }
+  }
+
+  save(): void {
+    const notesArray = Array.from(this.notes.values());
+    fs.writeFileSync(INDEX_PATH, JSON.stringify(notesArray, null, 2));
+    console.log(`✅ Saved ${notesArray.length} notes to ${INDEX_PATH}`);
+  }
+
+  walk(dir: string): string[] {
+    if (!fs.existsSync(dir)) {
+      console.warn(`Directory does not exist: ${dir}`);
+      return [];
+    }
+    
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    return entries.flatMap((entry: fs.Dirent) => {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) return this.walk(fullPath);
+      if (entry.isFile() && entry.name.endsWith('.md')) return [fullPath];
+      return [];
+    });
+  }
+
+  sha256(text: string): string {
+    return crypto.createHash('sha256').update(text).digest('hex');
+  }
+
+  parseNote(filePath: string): Note {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const parsed = matter(raw);
+    const relPath = path.relative(NOTES_DIR, filePath);
+    
+    const data = parsed.data as any;
+    
+    return {
+      id: data.id || path.basename(filePath, '.md'),
+      path: relPath,
+      title: data.title || 'Untitled',
+      created: data.created || new Date().toISOString().split('T')[0],
+      updated: data.updated || new Date().toISOString().split('T')[0],
+      tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
+      links: Array.isArray(data.links) ? data.links.map(String) : [],
+      content: (parsed.content || '').trim(),
+      content_hash: this.sha256(raw)
+    };
+  }
+
+  indexNotes(): Note[] {
+    console.log(`📁 Scanning ${NOTES_DIR} for markdown files...`);
+    
+    // Check if notes directory exists
+    if (!fs.existsSync(NOTES_DIR)) {
+      console.log(`Creating notes directory at ${NOTES_DIR}...`);
+      fs.mkdirSync(NOTES_DIR, { recursive: true });
+      
+      // Create a sample note
+      const sampleNote = `---
+id: sample-note
+title: Welcome to Your Note System
+created: 2024-01-01
+updated: 2024-01-01
+tags: [welcome, getting-started]
+links: []
+---
+
+# Welcome!
+
+This is your first note. You can:
+
+1. Add more notes in the \`notes/\` directory
+2. Use frontmatter for metadata
+3. Search notes with \`pnpm search "query"\`
+
+## Frontmatter Example
+
+\`\`\`yaml
+---
+id: unique-id
+title: Note Title
+created: YYYY-MM-DD
+updated: YYYY-MM-DD
+tags: [tag1, tag2]
+links: [other-note-id]
+---
+\`\`\``;
+      
+      fs.writeFileSync(path.join(NOTES_DIR, 'welcome.md'), sampleNote);
+    }
+    
+    const files = this.walk(NOTES_DIR);
+    console.log(`📄 Found ${files.length} markdown files`);
+    
+    if (files.length === 0) {
+      console.log('No markdown files found. A sample note has been created.');
+      files.push(path.join(NOTES_DIR, 'welcome.md'));
+    }
+    
+    const notes: Note[] = [];
+    const seenIds = new Set<string>();
+    
+    for (const file of files) {
+      try {
+        const note = this.parseNote(file);
+        
+        if (seenIds.has(note.id)) {
+          console.warn(`⚠️  Duplicate ID: "${note.id}" in ${note.path}`);
+          // Make ID unique
+          note.id = `${note.id}-${Date.now()}`;
+        }
+        seenIds.add(note.id);
+        
+        notes.push(note);
+        console.log(`✓ ${note.path}`);
+      } catch (error: any) {
+        console.error(`✗ Error processing ${file}:`, error.message);
+      }
+    }
+    
+    // Update database
+    this.notes.clear();
+    this.tagsIndex.clear();
+    this.contentIndex.clear();
+    
+    notes.forEach((note: Note) => {
+      this.notes.set(note.id, note);
+      
+      // Index tags
+      note.tags.forEach((tag: string) => {
+        if (!this.tagsIndex.has(tag)) {
+          this.tagsIndex.set(tag, new Set());
+        }
+        const tagSet = this.tagsIndex.get(tag);
+        if (tagSet) {
+          tagSet.add(note.id);
+        }
+      });
+      
+      // Index content for search
+      this.contentIndex.set(note.id, note.content.toLowerCase());
+    });
+    
+    this.save();
+    
+    // Sort by updated date (newest first)
+    notes.sort((a: Note, b: Note) => b.updated.localeCompare(a.updated));
+    
+    return notes;
+  }
+
+  search(query: string): Note[] {
+    const lowerQuery = query.toLowerCase();
+    
+    return Array.from(this.notes.values())
+      .filter((note: Note) => {
+        return note.title.toLowerCase().includes(lowerQuery) ||
+               note.content.toLowerCase().includes(lowerQuery) ||
+               note.tags.some((tag: string) => tag.toLowerCase().includes(lowerQuery)) ||
+               note.id.toLowerCase().includes(lowerQuery);
+      })
+      .sort((a: Note, b: Note) => b.updated.localeCompare(a.updated));
+  }
+
+  getStats(): DatabaseStats {
+    const notes = Array.from(this.notes.values());
+    const tags = new Map<string, number>();
+    
+    notes.forEach((note: Note) => {
+      note.tags.forEach((tag: string) => {
+        tags.set(tag, (tags.get(tag) || 0) + 1);
+      });
+    });
+    
+    const topTags: TagStats[] = Array.from(tags.entries())
+      .sort((a: [string, number], b: [string, number]) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([tag, count]: [string, number]) => ({ tag, count }));
+    
+    return {
+      totalNotes: notes.length,
+      totalTags: tags.size,
+      totalWords: notes.reduce((sum: number, note: Note) => sum + note.content.split(/\s+/).length, 0),
+      topTags
+    };
+  }
+}
+
+// Create and export database instance
+const db = new JSONDatabase();
+db.load();
+
+// Command line interface
+if (require.main === module) {
+  const command = process.argv[2];
+  
+  switch (command) {
+    case 'index':
+      console.log('🔍 Indexing notes...');
+      const notes = db.indexNotes();
+      const stats = db.getStats();
+      console.log('\n📊 Summary:');
+      console.log(`  Total notes: ${stats.totalNotes}`);
+      console.log(`  Total tags: ${stats.totalTags}`);
+      console.log(`  Total words: ${stats.totalWords}`);
+      if (stats.topTags.length > 0) {
+        console.log(`  Top tags: ${stats.topTags.map((t: TagStats) => `${t.tag}(${t.count})`).join(', ')}`);
+      }
+      break;
+      
+    case 'search':
+      if (!process.argv[3]) {
+        console.error('Usage: pnpm search "query"');
+        console.error('Example: pnpm search "machine learning"');
+        process.exit(1);
+      }
+      const query = process.argv.slice(3).join(' ');
+      console.log(`🔍 Searching for "${query}"...`);
+      const results = db.search(query);
+      
+      if (results.length === 0) {
+        console.log('No results found.');
+      } else {
+        console.log(`\nFound ${results.length} result(s):\n`);
+        results.forEach((note: Note, i: number) => {
+          console.log(`${i + 1}. [${note.id}] ${note.title}`);
+          console.log(`   Path: ${note.path}`);
+          console.log(`   Updated: ${note.updated}`);
+          if (note.tags.length > 0) {
+            console.log(`   Tags: ${note.tags.join(', ')}`);
+          }
+          // Show excerpt (first 150 chars)
+          const excerpt = note.content.substring(0, 150).replace(/\n/g, ' ');
+          console.log(`   Excerpt: ${excerpt}${note.content.length > 150 ? '...' : ''}\n`);
+        });
+      }
+      break;
+      
+    case 'list':
+      const allNotes = Array.from(db['notes'].values())
+        .sort((a: Note, b: Note) => b.updated.localeCompare(a.updated));
+      
+      console.log(`Total notes: ${allNotes.length}\n`);
+      allNotes.forEach((note: Note) => {
+        console.log(`- [${note.id}] ${note.title}`);
+        console.log(`  ${note.path} (updated: ${note.updated})`);
+        if (note.tags.length > 0) {
+          console.log(`  Tags: ${note.tags.join(', ')}`);
+        }
+        console.log();
+      });
+      break;
+      
+    case 'stats':
+      const statsResult: DatabaseStats = db.getStats();
+      console.log('📈 Statistics:');
+      console.log(`  Total notes: ${statsResult.totalNotes}`);
+      console.log(`  Total tags: ${statsResult.totalTags}`);
+      console.log(`  Total words: ${statsResult.totalWords}`);
+      if (statsResult.topTags.length > 0) {
+        console.log('\n  Top tags:');
+        statsResult.topTags.forEach((tag: TagStats) => {
+          console.log(`    ${tag.tag}: ${tag.count} note${tag.count > 1 ? 's' : ''}`);
+        });
+      }
+      break;
+      
+    default:
+      console.log('📝 Note Management System');
+      console.log('=======================\n');
+      console.log('Usage:');
+      console.log('  pnpm index          - Index all notes');
+      console.log('  pnpm search <query> - Search notes');
+      console.log('  pnpm list           - List all notes');
+      console.log('  pnpm stats          - Show statistics\n');
+      console.log('Examples:');
+      console.log('  pnpm index');
+      console.log('  pnpm search "transformer"');
+      console.log('  pnpm list');
+      console.log('  pnpm stats');
+      process.exit(1);
+  }
+}
+
+========================================
+FILE: scripts/sqljs-wrapper.ts
+----------------------------------------
+// scripts/sqljs-wrapper.ts
+import fs from 'fs';
+import path from 'path';
+import initSqlJs, { Database } from 'sql.js';
+
+const DB_PATH = path.resolve(__dirname, '../notes.db');
+
+export class SQLJSWrapper {
+  private db: Database | null = null;
+  private dbPath: string;
+
+  constructor(dbPath: string = DB_PATH) {
+    this.dbPath = path.resolve(dbPath);
+  }
+
+  async init(): Promise<void> {
+    if (this.db) return;
+
+    try {
+      console.log('Initializing SQL.js...');
+      
+      // Initialize SQL.js
+      const SQL = await initSqlJs({
+        // Use the wasm file from the package
+        locateFile: (file: string) => {
+          // Try local node_modules first
+          const localPath = path.join(__dirname, '../node_modules/sql.js/dist/sql-wasm.wasm');
+          if (fs.existsSync(localPath)) {
+            return localPath;
+          }
+          // Fallback to CDN
+          return `https://sql.js.org/dist/${file}`;
+        }
+      });
+
+      // Load existing database or create new one
+      if (fs.existsSync(this.dbPath)) {
+        console.log(`Loading existing database from ${this.dbPath}`);
+        const buffer = fs.readFileSync(this.dbPath);
+        this.db = new SQL.Database(new Uint8Array(buffer));
+      } else {
+        console.log(`Creating new database at ${this.dbPath}`);
+        this.db = new SQL.Database();
+        // Initialize with pragmas
+        this.exec("PRAGMA journal_mode = WAL");
+        this.exec("PRAGMA synchronous = NORMAL");
+        this.exec("PRAGMA foreign_keys = ON");
+      }
+
+      console.log('SQL.js initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize SQL.js:', error);
+      throw error;
+    }
+  }
+
+  exec(sql: string): void {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.run(sql);
+  }
+
+  query(sql: string, params: any[] = []): any[] {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const stmt = this.db.prepare(sql);
+    if (params && params.length > 0) {
+      stmt.bind(params);
+    }
+    
+    const results: any[] = [];
+    while (stmt.step()) {
+      results.push(stmt.getAsObject());
+    }
+    
+    stmt.free();
+    return results;
+  }
+
+  run(sql: string, params: any[] = []): { changes: number; lastInsertRowid: number } {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    this.exec(sql);
+    
+    return {
+      changes: this.db.getRowsModified(),
+      lastInsertRowid: this.getLastInsertRowid()
+    };
+  }
+
+  private getLastInsertRowid(): number {
+    if (!this.db) return 0;
+    
+    try {
+      const result = this.db.exec("SELECT last_insert_rowid()");
+      
+      // Safe access with optional chaining and nullish checks
+      if (result && 
+          result.length > 0 && 
+          result[0] && 
+          result[0].values && 
+          result[0].values.length > 0 && 
+          result[0].values[0] && 
+          result[0].values[0].length > 0) {
+        
+        const value = result[0].values[0][0];
+        if (typeof value === 'number') {
+          return value;
+        }
+      }
+    } catch (error) {
+      console.warn('Could not get last insert rowid:', error);
+    }
+    
+    return 0;
+  }
+
+  prepare(sql: string): any {
+    if (!this.db) throw new Error('Database not initialized');
+    return this.db.prepare(sql);
+  }
+
+  async close(): Promise<void> {
+    if (this.db) {
+      // Export and save to file
+      const data = this.db.export();
+      const buffer = Buffer.from(data);
+      fs.writeFileSync(this.dbPath, buffer);
+      
+      this.db.close();
+      this.db = null;
+      console.log(`Database saved to ${this.dbPath}`);
+    }
+  }
+
+  transaction(callback: () => void): void {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    try {
+      this.exec("BEGIN TRANSACTION");
+      callback();
+      this.exec("COMMIT");
+    } catch (error) {
+      this.exec("ROLLBACK");
+      throw error;
+    }
+  }
+}
+
+// Factory function
+export async function openDb(dbPath: string = DB_PATH): Promise<SQLJSWrapper> {
+  const db = new SQLJSWrapper(dbPath);
+  await db.init();
+  return db;
+}
+
+// Test function
+export async function testSQLJS(): Promise<boolean> {
+  try {
+    console.log('Testing SQL.js...');
+    
+    const db = new SQLJSWrapper(':memory:');
+    await db.init();
+    
+    // Create table
+    db.exec(`
+      CREATE TABLE test (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        value INTEGER
+      )
+    `);
+    
+    // Insert data
+    db.run("INSERT INTO test (name, value) VALUES (?, ?)", ["Test 1", 100]);
+    db.run("INSERT INTO test (name, value) VALUES (?, ?)", ["Test 2", 200]);
+    
+    // Query data
+    const results = db.query("SELECT * FROM test");
+    console.log('Query results:', results);
+    
+    // Test transaction
+    db.transaction(() => {
+      db.run("UPDATE test SET value = ? WHERE name = ?", [150, "Test 1"]);
+      db.run("UPDATE test SET value = ? WHERE name = ?", [250, "Test 2"]);
+    });
+    
+    const updated = db.query("SELECT * FROM test");
+    console.log('Updated results:', updated);
+    
+    await db.close();
+    
+    console.log('✅ SQL.js test passed!');
+    return true;
+  } catch (error) {
+    console.error('❌ SQL.js test failed:', error);
+    return false;
+  }
+}
+
+// Run test if called directly
+if (require.main === module) {
+  testSQLJS().then(success => {
+    process.exit(success ? 0 : 1);
+  });
+}
+
+========================================
+FILE: scripts/search.ts
+----------------------------------------
+import { openDb, initSchema } from "./init-db";
+
+
+const query = process.argv.slice(2).join("").trim();
+if (!query) {
+	console.error('Usage: pnpm search "your query"');
+	process.exit(1);
+}
+
+
+(async () => {
+	const db = await openDb();
+	try {
+		await initSchema(db);
+	// FTS5: MATCH uses FTS syntax (may improve escaping later on
+		const results = db.all(`
+			SELECT
+				n.id,
+				n.title,
+				n.path,
+				snippet(notes_fts, 1, '[', ']', '...', 12) AS snippet
+			FROM notes_fts
+			JOIN notes n ON n.id = notes_fts.note_id
+			WHERE notes_fts MATCH ?
+			ORDER BY rank
+			LIMIT 20;
+		`, [query, query, query, query]);
+
+	//const rows = stmt.all(query) as Array<{ id: string; title: string; path: string; snippet: string }>;
+
+		if (results.length === 0) {
+			console.log("No results.");
+		} else {
+			console.log(`Found ${results.length} results:`);
+			for (const r of results) {
+				console.log(`\n - [${r.id}] ${r.title} (${r.path})`);
+				if (r.snippet) 
+					console.log(`  ${r.snippet}`);
+			}
+		}
+	} finally {
+		await db.close();
+	}
+})().catch(console.error);
+
+//search().catch(console.error);
+
+========================================
+FILE: scripts/wasm-sqlite-wrapper.ts
+----------------------------------------
+// scripts/wasm-sqlite-wrapper.ts
+import fs from 'fs';
+import path from 'path';
+
+const DB_PATH = path.resolve(__dirname, '../notes.db');
+
+// Type definitions for sqlite-wasm
+interface SQLiteWASM {
+  version: {
+    libVersion: string;
+    sourceId: string;
+  };
+  oo1: {
+    DB: new (path: string, mode?: string) => any;
+  };
+  opfs?: {
+    OpfsDB: new (path: string, mode?: string) => any;
+  };
+}
+
+export class WasmSQLiteDB {
+  private db: any = null;
+  private dbPath: string;
+  private sqlite3: SQLiteWASM | null = null;
+
+  constructor(dbPath: string = DB_PATH) {
+    this.dbPath = dbPath;
+  }
+
+  async init(): Promise<void> {
+    if (this.db) return;
+
+    try {
+      console.log('Initializing SQLite WASM...');
+      
+      // Import and initialize
+      const initSQLite = (await import('@sqlite.org/sqlite-wasm')).default;
+      this.sqlite3 = await initSQLite({
+        print: console.log,
+        printErr: console.error,
+      });
+      
+      console.log(`SQLite version: ${this.sqlite3.version.libVersion}`);
+      
+      // Check if we can use OPFS (for browsers) or regular file system
+      if (fs.existsSync(this.dbPath)) {
+        console.log(`Loading existing database from ${this.dbPath}...`);
+        const dbBytes = fs.readFileSync(this.dbPath);
+        
+        // Create temporary in-memory DB
+        this.db = new this.sqlite3.oo1.DB(':memory:');
+        
+        // Import the bytes
+        const p = this.sqlite3.wasm.allocFromTypedArray(dbBytes);
+        this.db.close();
+        this.db = new this.sqlite3.oo1.DB(p, 'c');
+        this.sqlite3.wasm.dealloc(p);
+      } else {
+        console.log(`Creating new database at ${this.dbPath}...`);
+        this.db = new this.sqlite3.oo1.DB(this.dbPath, 'c');
+      }
+      
+      // Set pragmas for better performance
+      this.exec("PRAGMA journal_mode = WAL");
+      this.exec("PRAGMA synchronous = NORMAL");
+      this.exec("PRAGMA foreign_keys = ON");
+      this.exec("PRAGMA busy_timeout = 5000");
+      
+      console.log('SQLite WASM initialized successfully');
+      
+    } catch (error) {
+      console.error('Failed to initialize SQLite WASM:', error);
+      throw error;
+    }
+  }
+
+  exec(sql: string): void {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.exec(sql);
+  }
+
+  run(sql: string, params: any[] = []): { changes: number; lastInsertRowid: number } {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    // Prepare statement
+    const stmt = this.db.prepare(sql);
+    try {
+      if (params && params.length > 0) {
+        stmt.bind(params);
+      }
+      stmt.step();
+      
+      const changes = this.db.changes();
+      const lastInsertRowid = this.db.lastInsertRowid;
+      
+      return { changes, lastInsertRowid };
+    } finally {
+      stmt.finalize();
+    }
+  }
+
+  all(sql: string, params: any[] = []): any[] {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const stmt = this.db.prepare(sql);
+    try {
+      if (params && params.length > 0) {
+        stmt.bind(params);
+      }
+      
+      const results = [];
+      while (stmt.step()) {
+        results.push(stmt.get({}));
+      }
+      
+      return results;
+    } finally {
+      stmt.finalize();
+    }
+  }
+
+  get(sql: string, params: any[] = []): any {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const stmt = this.db.prepare(sql);
+    try {
+      if (params && params.length > 0) {
+        stmt.bind(params);
+      }
+      
+      return stmt.step() ? stmt.get({}) : null;
+    } finally {
+      stmt.finalize();
+    }
+  }
+
+  prepare(sql: string): any {
+    if (!this.db) throw new Error('Database not initialized');
+    return this.db.prepare(sql);
+  }
+
+  async close(): Promise<void> {
+    if (this.db && this.sqlite3) {
+      try {
+        // Export database to bytes
+        const bytes = this.db.export();
+        
+        // Save to file
+        if (this.dbPath !== ':memory:') {
+          const buffer = Buffer.from(bytes);
+          fs.writeFileSync(this.dbPath, buffer);
+          console.log(`Database saved to ${this.dbPath}`);
+        }
+        
+        this.db.close();
+        this.db = null;
+        console.log('Database closed');
+      } catch (error) {
+        console.error('Error closing database:', error);
+        throw error;
+      }
+    }
+  }
+
+  transaction<T>(callback: () => T): T {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    this.exec("BEGIN TRANSACTION");
+    try {
+      const result = callback();
+      this.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.exec("ROLLBACK");
+      throw error;
+    }
+  }
+}
+
+// Factory function to create and initialize database
+export async function openDb(dbPath: string = DB_PATH): Promise<WasmSQLiteDB> {
+  const db = new WasmSQLiteDB(dbPath);
+  await db.init();
+  return db;
+}
+
+// Test function
+export async function testWasmSQLite(): Promise<boolean> {
+  try {
+    console.log('Testing WASM SQLite...');
+    
+    const db = new WasmSQLiteDB(':memory:');
+    await db.init();
+    
+    // Create table
+    db.exec(`
+      CREATE TABLE test_table (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        value INTEGER
+      )
+    `);
+    
+    // Insert data
+    db.run("INSERT INTO test_table (name, value) VALUES (?, ?)", ["Alice", 100]);
+    db.run("INSERT INTO test_table (name, value) VALUES (?, ?)", ["Bob", 200]);
+    
+    // Query data
+    const results = db.all("SELECT * FROM test_table");
+    console.log('Query results:', results);
+    
+    // Test transaction
+    db.transaction(() => {
+      db.run("UPDATE test_table SET value = ? WHERE name = ?", [150, "Alice"]);
+      db.run("UPDATE test_table SET value = ? WHERE name = ?", [250, "Bob"]);
+    });
+    
+    const updated = db.all("SELECT * FROM test_table");
+    console.log('Updated results:', updated);
+    
+    await db.close();
+    
+    console.log('✅ WASM SQLite test passed!');
+    return true;
+  } catch (error) {
+    console.error('❌ WASM SQLite test failed:', error);
+    return false;
+  }
+}
+
+// Run test if called directly
+if (require.main === module) {
+  testWasmSQLite().then(success => {
+    process.exit(success ? 0 : 1);
+  });
+}
+
+========================================
+FILE: scripts/_paths.ts
+----------------------------------------
+import path from "path";
+
+export const ROOT_DIR = path.resolve(__dirname, "..");
+export const NOTES_DIR = path.resolve(ROOT_DIR, "notes");
+export const APP_DIR = path.resolve(ROOT_DIR, ".app");
+export const DB_PATH = path.resolve(APP_DIR, "index.sqlite");
+
+========================================
+FILE: scripts/init-db-simple.ts
+----------------------------------------
+// scripts/init-db-simple.ts
+import { openDb } from './sqljs-wrapper';
+import path from 'path';
+
+const DB_PATH = path.resolve(__dirname, '../notes.db');
+
+export async function initSchema(db: any): Promise<void> {
+  console.log('Creating database schema...');
+  
+  // Create notes table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notes (
+      id TEXT PRIMARY KEY,
+      path TEXT NOT NULL,
+      title TEXT NOT NULL,
+      created TEXT NOT NULL,
+      updated TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      UNIQUE(id)
+    )
+  `);
+  
+  // Create tags table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS note_tags (
+      note_id TEXT NOT NULL,
+      tag TEXT NOT NULL,
+      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
+      UNIQUE(note_id, tag)
+    )
+  `);
+  
+  // Create links table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS note_links (
+      from_id TEXT NOT NULL,
+      to_id TEXT NOT NULL,
+      FOREIGN KEY (from_id) REFERENCES notes(id) ON DELETE CASCADE,
+      UNIQUE(from_id, to_id)
+    )
+  `);
+  
+  // Create content table for search (SQL.js doesn't support FTS5, so we'll use LIKE)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS note_content (
+      note_id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+    )
+  `);
+  
+  console.log('✅ Database schema created');
+}
+
+// Self-executing when run directly
+if (require.main === module) {
+  (async () => {
+    try {
+      console.log(`Initializing database at ${DB_PATH}...`);
+      
+      const db = await openDb();
+      await initSchema(db);
+      
+      // List all tables
+      const tables = db.query(`
+        SELECT name FROM sqlite_master 
+        WHERE type='table' 
+        ORDER BY name
+      `);
+      
+      console.log('\nDatabase tables created:');
+      tables.forEach((table: any) => {
+        console.log(`  - ${table.name}`);
+      });
+      
+      await db.close();
+      console.log(`\n✅ Database initialized successfully at ${DB_PATH}`);
+      
+    } catch (error) {
+      console.error('❌ Database initialization failed:', error);
+      process.exit(1);
+    }
+  })();
+}
+
+========================================
+FILE: scripts/reindex.ts
+----------------------------------------
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
+import matter from "gray-matter";
+//import Database from "better-sqlite3";
+import { SQLiteDB } from "./sqlite-wrapper";
+import { NOTES_DIR } from "./_paths";
+import { openDb, initSchema } from "./init-db";
+
+type Frontmatter = {
+	id: string;
+	title: string;
+	created: string;	// YYYY-MM-DD
+	updated: string;	// YYYY-MM-DD
+	tags?: string[];
+	links?: string[];
+	status?: "draft" | "active" | "archived";
+	source?: string;
+};
+
+type IndexedNote = {
+	id: string;
+	relPath: string;
+	title: string;
+	created: string;
+	updated: string;
+	tags: string[];
+	links: string[];
+	content: string;
+	contentHash: string;
+};
+
+function walk(dir: string): string[] {
+	if (!fs.existsSync(dir)) return [];
+	const entries = fs.readdirSync(dir, { withFileTypes: true });
+	return entries.flatMap((entry) => {
+		const fullPath = path.join(dir, entry.name);
+		if (entry.isDirectory()) return walk(fullPath); 
+		if (entry.isFile() && entry.name.endsWith(".md")) return [fullPath];
+		return [];
+	});
+}
+
+function sha256(text: string): string {
+	return crypto.createHash("sha256").update(text).digest("hex");
+}
+
+function assertIsoDate(d: string, ctx: string) {
+	// YYYY-MM-DD simple
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+		throw new Error(`Invalid ISO date '${d}' in ${ctx} (expected YYYY-MM-DD)`);
+	}
+}
+
+function parseNote(fileAbsPath: string): IndexedNote {
+	const raw = fs.readFileSync(fileAbsPath, "utf8");
+	const parsed = matter(raw);
+
+	const data = parsed.data as Partial<Frontmatter>;
+	const relPath = path.relative(NOTES_DIR, fileAbsPath);
+
+	if (!data.id) throw new Error(`Missing 'id' in frontmatter: ${relPath}`);
+	if (!data.title) throw new Error(`Missing 'title' in frontmatter: ${relPath}`);
+	if (!data.created) throw new Error(`Missing 'created' in frontmatter: ${relPath}`);
+	if (!data.updated) throw new Error(`Missing 'updated' in frontmatter: ${relPath}`);
+
+	assertIsoDate(data.created, relPath);
+	assertIsoDate(data.updated, relPath);
+	
+	const tags = Array.isArray(data.tags) ? data.tags.map(String) : [];
+	const links = Array.isArray(data.links) ? data.links.map(String) : [];
+
+	// Indexable content: body with no frontmatter
+	const content = (parsed.content ?? "").trim();
+
+	// Hash: full raw to be conservative
+	const contentHash = sha256(raw);
+
+	return {
+		id: String(data.id),
+		relPath,
+		title: String(data.title),
+		created: String(data.created),
+		updated: String(data.updated),
+		tags,
+		links,
+		content,
+		contentHash,
+	};
+}
+
+function reindex(db: SQLiteDB) {
+	initSchema(db);
+
+	const files = walk(NOTES_DIR);
+	const notes: IndexedNote[] = files.map(parseNote);
+
+	// Glob validations (unique ids)
+	const seen = new Set<string>();
+	for (const n of notes) {
+		if (seen.has(n.id)) throw new Error(`Duplicate note id: ${n.id}`);
+		seen.add(n.id);
+	}
+	
+  // Clear existing data
+  db.exec("DELETE FROM note_tags;");
+  db.exec("DELETE FROM note_links;");
+  db.exec("DELETE FROM notes_content;");
+  db.exec("DELETE FROM notes;");
+
+  // Insert new data
+  for (const n of notes) {
+    // Insert note
+    db.run(
+      `INSERT INTO notes (id, path, title, created, updated, content_hash) VALUES (?, ?, ?, ?, ?, ?)`,
+      [n.id, n.relPath, n.title, n.created, n.updated, n.contentHash]
+    );
+
+    // Insert tags
+    for (const tag of n.tags) {
+      db.run(`INSERT INTO note_tags (note_id, tag) VALUES (?, ?)`, [n.id, tag]);
+    }
+
+    // Insert links
+    for (const toId of n.links) {
+      db.run(`INSERT INTO note_links (from_id, to_id) VALUES (?, ?)`, [n.id, toId]);
+    }
+
+    // Insert content for search
+    db.run(`INSERT INTO notes_content (note_id, content) VALUES (?, ?)`, [n.id, n.content]);
+  }
+
+  return { count: notes.length };
+}
+
+if (require.main === module) {
+  (async () => {
+    const db = await openDb();
+    try {
+      const { count } = reindex(db);
+      console.log(`Reindex OK. Notes indexed: ${count}`);
+    } catch(err) {
+      console.error("Reindex failed:");
+      console.error(err);
+      process.exitCode = 1;
+    } finally {
+      await db.close();
+    }
+  })();
+}
+
+			
+
+========================================
+FILE: scripts/wasm-db.ts
+----------------------------------------
+import fs from 'fs';
+import path from 'path';
+
+const DB_PATH = path.resolve(__dirname, '../notes.db');
+
+// We'll use the sqlite-wasm library
+export class WasmSQLiteDB {
+  private db: any = null;
+  private dbPath: string;
+  private sqlite3: any = null;
+
+  constructor(dbPath: string = DB_PATH) {
+    this.dbPath = dbPath;
+  }
+
+  async init(): Promise<void> {
+    // Dynamically import sqlite-wasm
+    const sqlite3 = await import('@sqlite.org/sqlite-wasm');
+    this.sqlite3 = sqlite3;
+    
+    console.log('SQLite version:', sqlite3.version.libVersion);
+    
+    // Create or open database
+    if (fs.existsSync(this.dbPath)) {
+      const dbBytes = fs.readFileSync(this.dbPath);
+      const p = sqlite3.wasm.allocFromTypedArray(dbBytes);
+      this.db = new sqlite3.oo1.DB(p, 'c');
+      sqlite3.wasm.dealloc(p);
+    } else {
+      this.db = new sqlite3.oo1.DB(this.dbPath, 'c');
+    }
+    
+    // Set pragmas
+    this.exec("PRAGMA journal_mode = WAL");
+    this.exec("PRAGMA synchronous = NORMAL");
+    this.exec("PRAGMA foreign_keys = ON");
+  }
+
+  exec(sql: string): void {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.exec(sql);
+  }
+
+  run(sql: string, params: any[] = []): { changes: number; lastInsertRowid: number } {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const stmt = this.db.prepare(sql);
+    try {
+      stmt.bind(params);
+      stmt.step();
+      const changes = this.db.changes();
+      const lastInsertRowid = this.db.lastInsertRowid;
+      return { changes, lastInsertRowid };
+    } finally {
+      stmt.finalize();
+    }
+  }
+
+  all(sql: string, params: any[] = []): any[] {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const stmt = this.db.prepare(sql);
+    try {
+      stmt.bind(params);
+      const results = [];
+      while (stmt.step()) {
+        results.push(stmt.get({}));
+      }
+      return results;
+    } finally {
+      stmt.finalize();
+    }
+  }
+
+  get(sql: string, params: any[] = []): any {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const stmt = this.db.prepare(sql);
+    try {
+      stmt.bind(params);
+      return stmt.step() ? stmt.get({}) : null;
+    } finally {
+      stmt.finalize();
+    }
+  }
+
+  prepare(sql: string): any {
+    if (!this.db) throw new Error('Database not initialized');
+    return this.db.prepare(sql);
+  }
+
+  async close(): Promise<void> {
+    if (this.db) {
+      // Save to file
+      const bytes = this.db.export();
+      const buffer = Buffer.from(bytes);
+      fs.writeFileSync(this.dbPath, buffer);
+      this.db.close();
+      this.db = null;
+    }
+  }
+
+  transaction(callback: () => void): void {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    this.exec("BEGIN TRANSACTION");
+    try {
+      callback();
+      this.exec("COMMIT");
+    } catch (error) {
+      this.exec("ROLLBACK");
+      throw error;
+    }
+  }
+}
+
+export async function openDb(): Promise<WasmSQLiteDB> {
+  const db = new WasmSQLiteDB();
+  await db.init();
+  return db;
+}
+
+========================================
+FILE: package.json
+----------------------------------------
+{
+  "name": "ercole",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "index-db": "ts-node scripts/json-db.ts index",
+    "search-db": "ts-node scripts/json-db.ts search",
+    "list-db": "ts-node scripts/json-db.ts list",
+    "stats-db": "ts-node scripts/json-db.ts stats"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
+
+========================================
+FILE: project_exporter_exl.cpp
+----------------------------------------
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <filesystem>
+#include <unordered_set>
+#include <vector>
+
+namespace fs = std::filesystem;
+
+bool looks_text_file(const fs::path& p) {
+    static const std::vector<std::string> exts = {
+        ".txt", ".md", ".json", ".js", ".mjs", ".cjs",
+        ".ts", ".tsx", ".css", ".html", ".c", ".h",
+        ".cpp", ".hpp", ".cc", ".hh", ".ino", ".py",
+        ".sh", ".xml", ".yaml", ".yml"
+    };
+
+    auto ext = p.extension().string();
+    for (auto& e : exts)
+        if (ext == e) return true;
+    return false;
+}
+
+int main(int argc, char* argv[]) {
+    fs::path root;
+
+    if (argc >= 2)
+        root = argv[1];
+    else
+        root = fs::current_path();
+
+    if (!fs::exists(root) || !fs::is_directory(root)) {
+        std::cerr << "Errore: '" << root << "' non è una directory valida.\n";
+        return 1;
+    }
+
+    // Directory da escludere completamente
+    const std::unordered_set<std::string> exclude_dirs = {
+        "node_modules",
+        ".git",
+        "dist",
+        "build",
+        "out",
+        "coverage"
+    };
+
+    std::ofstream out("project-dump.txt");
+    if (!out) {
+        std::cerr << "Errore nella creazione del file di output.\n";
+        return 1;
+    }
+
+    for (auto const& entry : fs::recursive_directory_iterator(
+             root,
+             fs::directory_options::skip_permission_denied))
+    {
+        const auto& path = entry.path();
+
+        if (entry.is_directory()) {
+            if (exclude_dirs.count(path.filename().string())) {
+                // Skip entire directory
+                std::cout << ">> Esclusa directory: " << path << "\n";
+                continue;
+            }
+        }
+
+        if (!entry.is_regular_file())
+            continue;
+
+        if (!looks_text_file(path))
+            continue;
+
+        auto rel = fs::relative(path, root);
+
+        out << "\n========================================\n";
+        out << "FILE: " << rel.string() << "\n";
+        out << "----------------------------------------\n";
+
+        std::ifstream in(path);
+        if (!in) {
+            out << "[Impossibile leggere il file]\n";
+            continue;
+        }
+
+        std::string line;
+        while (std::getline(in, line))
+            out << line << "\n";
+    }
+
+    std::cout << "✔ Esportazione completata (project-dump.txt)\n";
+    return 0;
+}
+
+========================================
+FILE: pnpm-lock.yaml
+----------------------------------------
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      gray-matter:
+        specifier: ^4.0.3
+        version: 4.0.3
+    devDependencies:
+      '@types/node':
+        specifier: ^25.2.2
+        version: 25.2.2
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@25.2.2)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+packages:
+
+  '@cspotcode/source-map-support@0.8.1':
+    resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
+    engines: {node: '>=12'}
+
+  '@jridgewell/resolve-uri@3.1.2':
+    resolution: {integrity: sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==}
+    engines: {node: '>=6.0.0'}
+
+  '@jridgewell/sourcemap-codec@1.5.5':
+    resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
+
+  '@jridgewell/trace-mapping@0.3.9':
+    resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
+
+  '@tsconfig/node10@1.0.12':
+    resolution: {integrity: sha512-UCYBaeFvM11aU2y3YPZ//O5Rhj+xKyzy7mvcIoAjASbigy8mHMryP5cK7dgjlz2hWxh1g5pLw084E0a/wlUSFQ==}
+
+  '@tsconfig/node12@1.0.11':
+    resolution: {integrity: sha512-cqefuRsh12pWyGsIoBKJA9luFu3mRxCA+ORZvA4ktLSzIuCUtWVxGIuXigEwO5/ywWFMZ2QEGKWvkZG1zDMTag==}
+
+  '@tsconfig/node14@1.0.3':
+    resolution: {integrity: sha512-ysT8mhdixWK6Hw3i1V2AeRqZ5WfXg1G43mqoYlM2nc6388Fq5jcXyr5mRsqViLx/GJYdoL0bfXD8nmF+Zn/Iow==}
+
+  '@tsconfig/node16@1.0.4':
+    resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
+
+  '@types/node@25.2.2':
+    resolution: {integrity: sha512-BkmoP5/FhRYek5izySdkOneRyXYN35I860MFAGupTdebyE66uZaR+bXLHq8k4DirE5DwQi3NuhvRU1jqTVwUrQ==}
+
+  acorn-walk@8.3.4:
+    resolution: {integrity: sha512-ueEepnujpqee2o5aIYnvHU6C0A42MNdsIDeqy5BydrkuC5R1ZuUFnm27EeFJGoEHJQgn3uleRvmTXaJgfXbt4g==}
+    engines: {node: '>=0.4.0'}
+
+  acorn@8.15.0:
+    resolution: {integrity: sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg==}
+    engines: {node: '>=0.4.0'}
+    hasBin: true
+
+  arg@4.1.3:
+    resolution: {integrity: sha512-58S9QDqG0Xx27YwPSt9fJxivjYl432YCwfDMfZ+71RAqUrZef7LrKQZ3LHLOwCS4FLNBplP533Zx895SeOCHvA==}
+
+  argparse@1.0.10:
+    resolution: {integrity: sha512-o5Roy6tNG4SL/FOkCAN6RzjiakZS25RLYFrcMttJqbdd8BWrnA+fGz57iN5Pb06pvBGvl5gQ0B48dJlslXvoTg==}
+
+  create-require@1.1.1:
+    resolution: {integrity: sha512-dcKFX3jn0MpIaXjisoRvexIJVEKzaq7z2rZKxf+MSr9TkdmHmsU4m2lcLojrj/FHl8mk5VxMmYA+ftRkP/3oKQ==}
+
+  diff@4.0.4:
+    resolution: {integrity: sha512-X07nttJQkwkfKfvTPG/KSnE2OMdcUCao6+eXF3wmnIQRn2aPAHH3VxDbDOdegkd6JbPsXqShpvEOHfAT+nCNwQ==}
+    engines: {node: '>=0.3.1'}
+
+  esprima@4.0.1:
+    resolution: {integrity: sha512-eGuFFw7Upda+g4p+QHvnW0RyTX/SVeJBDM/gCtMARO0cLuT2HcEKnTPvhjV6aGeqrCB/sbNop0Kszm0jsaWU4A==}
+    engines: {node: '>=4'}
+    hasBin: true
+
+  extend-shallow@2.0.1:
+    resolution: {integrity: sha512-zCnTtlxNoAiDc3gqY2aYAWFx7XWWiasuF2K8Me5WbN8otHKTUKBwjPtNpRs/rbUZm7KxWAaNj7P1a/p52GbVug==}
+    engines: {node: '>=0.10.0'}
+
+  gray-matter@4.0.3:
+    resolution: {integrity: sha512-5v6yZd4JK3eMI3FqqCouswVqwugaA9r4dNZB1wwcmrD02QkV5H0y7XBQW8QwQqEaZY1pM9aqORSORhJRdNK44Q==}
+    engines: {node: '>=6.0'}
+
+  is-extendable@0.1.1:
+    resolution: {integrity: sha512-5BMULNob1vgFX6EjQw5izWDxrecWK9AM72rugNr0TFldMOi0fj6Jk+zeKIt0xGj4cEfQIJth4w3OKWOJ4f+AFw==}
+    engines: {node: '>=0.10.0'}
+
+  js-yaml@3.14.2:
+    resolution: {integrity: sha512-PMSmkqxr106Xa156c2M265Z+FTrPl+oxd/rgOQy2tijQeK5TxQ43psO1ZCwhVOSdnn+RzkzlRz/eY4BgJBYVpg==}
+    hasBin: true
+
+  kind-of@6.0.3:
+    resolution: {integrity: sha512-dcS1ul+9tmeD95T+x28/ehLgd9mENa3LsvDTtzm3vyBEO7RPptvAD+t44WVXaUjTBRcrpFeFlC8WCruUR456hw==}
+    engines: {node: '>=0.10.0'}
+
+  make-error@1.3.6:
+    resolution: {integrity: sha512-s8UhlNe7vPKomQhC1qFelMokr/Sc3AgNbso3n74mVPA5LTZwkB9NlXf4XPamLxJE8h0gh73rM94xvwRT2CVInw==}
+
+  section-matter@1.0.0:
+    resolution: {integrity: sha512-vfD3pmTzGpufjScBh50YHKzEu2lxBWhVEHsNGoEXmCmn2hKGfeNLYMzCJpe8cD7gqX7TJluOVpBkAequ6dgMmA==}
+    engines: {node: '>=4'}
+
+  sprintf-js@1.0.3:
+    resolution: {integrity: sha512-D9cPgkvLlV3t3IzL0D0YLvGA9Ahk4PcvVwUbN0dSGr1aP0Nrt4AEnTUbuGvquEC0mA64Gqt1fzirlRs5ibXx8g==}
+
+  strip-bom-string@1.0.0:
+    resolution: {integrity: sha512-uCC2VHvQRYu+lMh4My/sFNmF2klFymLX1wHJeXnbEJERpV/ZsVuonzerjfrGpIGF7LBVa1O7i9kjiWvJiFck8g==}
+    engines: {node: '>=0.10.0'}
+
+  ts-node@10.9.2:
+    resolution: {integrity: sha512-f0FFpIdcHgn8zcPSbf1dRevwt047YMnaiJM3u2w2RewrB+fob/zePZcrOyQoLMMO7aBIddLcQIEK5dYjkLnGrQ==}
+    hasBin: true
+    peerDependencies:
+      '@swc/core': '>=1.2.50'
+      '@swc/wasm': '>=1.2.50'
+      '@types/node': '*'
+      typescript: '>=2.7'
+    peerDependenciesMeta:
+      '@swc/core':
+        optional: true
+      '@swc/wasm':
+        optional: true
+
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+  undici-types@7.16.0:
+    resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
+
+  v8-compile-cache-lib@3.0.1:
+    resolution: {integrity: sha512-wa7YjyUGfNZngI/vtK0UHAN+lgDCxBPCylVXGp0zu59Fz5aiGtNXaq3DhIov063MorB+VfufLh3JlF2KdTK3xg==}
+
+  yn@3.1.1:
+    resolution: {integrity: sha512-Ux4ygGWsu2c7isFWe8Yu1YluJmqVhxqK2cLXNQA5AcC3QfbGNpM7fu0Y8b/z16pXLnFxZYvWhd3fhBY9DLmC6Q==}
+    engines: {node: '>=6'}
+
+snapshots:
+
+  '@cspotcode/source-map-support@0.8.1':
+    dependencies:
+      '@jridgewell/trace-mapping': 0.3.9
+
+  '@jridgewell/resolve-uri@3.1.2': {}
+
+  '@jridgewell/sourcemap-codec@1.5.5': {}
+
+  '@jridgewell/trace-mapping@0.3.9':
+    dependencies:
+      '@jridgewell/resolve-uri': 3.1.2
+      '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@tsconfig/node10@1.0.12': {}
+
+  '@tsconfig/node12@1.0.11': {}
+
+  '@tsconfig/node14@1.0.3': {}
+
+  '@tsconfig/node16@1.0.4': {}
+
+  '@types/node@25.2.2':
+    dependencies:
+      undici-types: 7.16.0
+
+  acorn-walk@8.3.4:
+    dependencies:
+      acorn: 8.15.0
+
+  acorn@8.15.0: {}
+
+  arg@4.1.3: {}
+
+  argparse@1.0.10:
+    dependencies:
+      sprintf-js: 1.0.3
+
+  create-require@1.1.1: {}
+
+  diff@4.0.4: {}
+
+  esprima@4.0.1: {}
+
+  extend-shallow@2.0.1:
+    dependencies:
+      is-extendable: 0.1.1
+
+  gray-matter@4.0.3:
+    dependencies:
+      js-yaml: 3.14.2
+      kind-of: 6.0.3
+      section-matter: 1.0.0
+      strip-bom-string: 1.0.0
+
+  is-extendable@0.1.1: {}
+
+  js-yaml@3.14.2:
+    dependencies:
+      argparse: 1.0.10
+      esprima: 4.0.1
+
+  kind-of@6.0.3: {}
+
+  make-error@1.3.6: {}
+
+  section-matter@1.0.0:
+    dependencies:
+      extend-shallow: 2.0.1
+      kind-of: 6.0.3
+
+  sprintf-js@1.0.3: {}
+
+  strip-bom-string@1.0.0: {}
+
+  ts-node@10.9.2(@types/node@25.2.2)(typescript@5.9.3):
+    dependencies:
+      '@cspotcode/source-map-support': 0.8.1
+      '@tsconfig/node10': 1.0.12
+      '@tsconfig/node12': 1.0.11
+      '@tsconfig/node14': 1.0.3
+      '@tsconfig/node16': 1.0.4
+      '@types/node': 25.2.2
+      acorn: 8.15.0
+      acorn-walk: 8.3.4
+      arg: 4.1.3
+      create-require: 1.1.1
+      diff: 4.0.4
+      make-error: 1.3.6
+      typescript: 5.9.3
+      v8-compile-cache-lib: 3.0.1
+      yn: 3.1.1
+
+  typescript@5.9.3: {}
+
+  undici-types@7.16.0: {}
+
+  v8-compile-cache-lib@3.0.1: {}
+
+  yn@3.1.1: {}
+
+========================================
+FILE: notes/hello.md
+----------------------------------------
+---
+id: hello
+title: "Hello Ercole"
+created: 2026-02-08
+updated: 2026-02-08
+tags: [test]
+links: []
+status: active
+---
+
+Questa è una nota di prova su transformer e latent diffusion.
+
+========================================
+FILE: docs/first-flow.md
+----------------------------------------
+1. User builds or modifies a file .md in ercole/notes
+2. A watcher detects the edit
+3. File is parsed
+4. DB is updated
+5. Search is sensitive to the update
+
+========================================
+FILE: docs/note-format.md
+----------------------------------------
+# Note Format - Ercole
+
+## 1. Source of Truth
+- Every note is a Markdown (.md) file on disk
+- The filesystem is the main source
+- Every index/cache/DB is deriveable and reconstructable
+
+## 2. Position
+- All notes found in `ercole/notes`
+- Subfolders have only organization
+- Path is NOT identity
+
+## 3. Identity
+- Every note has a stable `id`
+- Id may not change even if:
+    - file is renamed
+    - file is moved
+- Id is used for linking, graphs and internal references
+
+## 4. Frontmatter (YAML)
+Every note MUST begin with a valid YAML
+
+### Mandatory fields:
+- `id`: string (UUID or short-id)
+- `title`: string
+- `created`: ISO date
+- `updated`: ISO date
+
+### Optional fields:
+- `tags`: string[]
+- `links`: string[] # IDs of other notes
+- `status`: draft | active | archived
+- `source`: string # e.g. book, URL, project
+
+### Example
+```yaml
+---
+id: 9f2c1a6e
+title: "Coding agent idea"
+created: 2026-02-08
+updated: 2026-02-10
+tags: [ai, coding, agent]
+links: [transformers, diffusion]
+status: active
+---
+
+## Body
+- Standard Markdown
+- Code blocks allowed
+- No mandatory inline HTML
+
+## Rules
+- Path is not identity (may change)
+- ID is identity
+- No note can exist exclusively in DB
+
+========================================
+FILE: docs/indexing-and-db.md
+----------------------------------------
+# Indexing & Database - Ercole
+
+## Database role
+- Cache deriveable
+- Support to search and graphs
+- Never source of truth
+
+## May contain
+- Indexed text
+- Metadata
+- Relations among notes
+
+## May not contain
+- Contents not present in disk
+- Irreversible states
+- Domain logic
+
+## Recovery
+- The DB may be cancelled and rebuilt
+- No information loss
+
+========================================
+FILE: tsconfigOLD.json
+----------------------------------------
+{
+  // Visit https://aka.ms/tsconfig to read more about this file
+  "compilerOptions": {
+    // File Layout
+    "rootDir": ".",
+    "outDir": "./dist",
+
+    // Environment Settings
+    // See also https://aka.ms/tsconfig/module
+    "module": "commonjs",
+    "target": "ES2020",
+    "types": ["node"],
+    "lib": ["ES2020"],
+    // For nodejs:
+    // "lib": ["esnext"],
+    // "types": ["node"],
+    // and npm install -D @types/node
+
+    // Other Outputs
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+
+    // Stricter Typechecking Options
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
+    // Style Options
+    // "noImplicitReturns": true,
+    // "noImplicitOverride": true,
+    // "noUnusedLocals": true,
+    // "noUnusedParameters": true,
+    // "noFallthroughCasesInSwitch": true,
+    // "noPropertyAccessFromIndexSignature": true,
+
+    // Recommended Options
+    "strict": true,
+    "jsx": "react-jsx",
+    "verbatimModuleSyntax": false,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "allowJs": true,
+    "noImplicitAny": true,
+  },
+  "include": ["scripts/**/*", "notes/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
+
+========================================
+FILE: notes-index.json
+----------------------------------------
+[
+  {
+    "id": "hello",
+    "path": "hello.md",
+    "title": "Hello Ercole",
+    "created": "2026-02-08T00:00:00.000Z",
+    "updated": "2026-02-08T00:00:00.000Z",
+    "tags": [
+      "test"
+    ],
+    "links": [],
+    "content": "Questa è una nota di prova su transformer e latent diffusion.",
+    "content_hash": "ab897c92a9792574f7e757fc3bda8aa7e5f049a0f75f2aa4f09bc230cfd4a21a"
+  }
+]
+
+========================================
+FILE: debug-sqlite.js
+----------------------------------------
+// debug-sqlite.js
+async function debugSQLite() {
+  try {
+    console.log('Debugging SQLite WASM import...');
+    
+    // Try different import methods
+    const module1 = await import('@sqlite.org/sqlite-wasm');
+    console.log('Method 1 - Full module:', Object.keys(module1));
+    
+    // Try accessing default
+    console.log('Method 1 - Has default?', 'default' in module1);
+    if (module1.default) {
+      console.log('Method 1 - Default type:', typeof module1.default);
+    }
+    
+    // Try direct properties
+    console.log('Method 1 - Direct version property?', 'version' in module1);
+    console.log('Method 1 - Direct oo1 property?', 'oo1' in module1);
+    
+  } catch (error) {
+    console.error('Debug error:', error);
+  }
+}
+
+debugSQLite();
