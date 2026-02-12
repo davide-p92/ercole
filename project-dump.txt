@@ -3,127 +3,6 @@ Root: "/workspaces/codespaces-blank/ercole"
 
 
 ========================================
-FILE: test-sqlite.js
-----------------------------------------
-const Database = require('better-sqlite3');
-
-try {
-  const db = new Database(':memory:');
-  const result = db.prepare('SELECT 1 + 1 as sum').get();
-  console.log('✅ SQLite test passed:', result);
-  db.close();
-} catch (error) {
-  console.error('❌ SQLite test failed:', error.message);
-  console.error('Full error:', error);
-}
-
-========================================
-FILE: test-sqlite-correct.js
-----------------------------------------
-// test-sqlite-correct.js
-async function testSQLiteWASM() {
-  try {
-    console.log('Testing SQLite WASM (correct way)...');
-    
-    // The default export is a function that initializes SQLite
-    const initSQLite = (await import('@sqlite.org/sqlite-wasm')).default;
-    
-    // Initialize SQLite
-    const sqlite3 = await initSQLite({
-      // Optional: print and error handlers
-      print: console.log,
-      printErr: console.error,
-    });
-    
-    console.log('SQLite version:', sqlite3.version.libVersion);
-    
-    // Create an in-memory database
-    const db = new sqlite3.oo1.DB(':memory:');
-    
-    // Create a table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS test (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    
-    // Insert data
-    db.exec(`
-      INSERT INTO test (name) VALUES ('Alice');
-      INSERT INTO test (name) VALUES ('Bob');
-      INSERT INTO test (name) VALUES ('Charlie');
-    `);
-    
-    // Query data
-    const result = db.exec(`
-      SELECT * FROM test ORDER BY name
-    `, { returnValue: 'resultRows' });
-    
-    console.log('Query result:', result);
-    
-    // Get row count
-    const count = db.exec(`
-      SELECT COUNT(*) as count FROM test
-    `, { returnValue: 'resultRows' });
-    
-    console.log('Total rows:', count[0].count);
-    
-    // Close database
-    db.close();
-    
-    console.log('✅ SQLite WASM test passed!');
-    return true;
-    
-  } catch (error) {
-    console.error('❌ SQLite WASM test failed:', error);
-    console.error('Full error:', error.stack || error);
-    return false;
-  }
-}
-
-// Run the test
-testSQLiteWASM();
-
-========================================
-FILE: packageOLD.json
-----------------------------------------
-{
-  "name": "ercole",
-  "private": true,
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "init-db": "ts-node scripts/init-db.ts",
-    "index-db": "ts-node scripts/reindex.ts",
-    "search-db": "ts-node scripts/search.ts",
-    "test-sqlite": "ts-node scripts/wasm-sqlite-wrapper.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "packageManager": "pnpm@10.29.1",
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^25.2.2",
-    "@types/sql.js": "^1.4.9",
-    "gray-matter": "^4.0.3",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
-  },
-  "dependencies": {
-    "@sqlite.org/sqlite-wasm": "^3.51.2-build6",
-    "better-sqlite3": "8.5.0",
-    "sql.js": "^1.13.0",
-    "sqlite": "^5.1.1",
-    "sqljs": "0.0.0-6"
-  }
-}
-
-========================================
 FILE: tsconfig.json
 ----------------------------------------
 {
@@ -142,47 +21,6 @@ FILE: tsconfig.json
 }
 
 ========================================
-FILE: test-wasm-sqlite.ts
-----------------------------------------
-const fs = require('fs');
-
-// Test sqlite-wasm without TypeScript complications
-async function testWasmSQLite() {
-  try {
-    console.log('Testing SQLite WASM...');
-    
-    // Dynamically import
-    const sqlite3 = await import('@sqlite.org/sqlite-wasm');
-    console.log('SQLite version:', sqlite3.version.libVersion);
-    
-    // Create in-memory database
-    const db = new sqlite3.oo1.DB(':memory:');
-    
-    // Create a table
-    db.exec('CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)');
-    
-    // Insert data
-    db.exec('INSERT INTO test (name) VALUES ("test1"), ("test2")');
-    
-    // Query data
-    const results = db.exec('SELECT * FROM test', { returnValue: 'resultRows' });
-    console.log('Query results:', results);
-    
-    // Cleanup
-    db.close();
-    
-    console.log('✅ SQLite WASM test passed!');
-    return true;
-  } catch (error) {
-    console.error('❌ SQLite WASM test failed:', error);
-    return false;
-  }
-}
-
-// Run test
-testWasmSQLite();
-
-========================================
 FILE: project-dump.txt
 ----------------------------------------
 
@@ -194,549 +32,143 @@ packageOLD.json
 tsconfigOLD.json
 
 ========================================
-FILE: proj_exp.cpp
+FILE: scripts/watch.ts
 ----------------------------------------
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <sstream>
-#include <string>
-#include <unordered_set>
-#include <vector>
-
-namespace fs = std::filesystem;
-
-// Heuristics: quali estensioni considerare "testo"
-bool looks_text_file(const fs::path& p) {
-    static const std::unordered_set<std::string> exts = {
-        ".txt", ".md", ".markdown", ".json", ".js",  ".mjs", ".cjs",
-        ".ts",  ".tsx", ".css",     ".scss", ".html", ".xml",
-        ".c",   ".h",   ".cpp",     ".hpp",  ".cc",   ".hh",
-        ".ino", ".py",  ".sh",      ".yml",  ".yaml", ".toml",
-        ".env", ".conf", ".ini",    ".cfg",  ".gradle", ".properties"
-    };
-    auto ext = p.extension().string();
-    return exts.count(ext) > 0 || ext.empty(); // anche file senza estensione (spesso testo)
-}
-
-// Split semplice su virgola
-std::vector<std::string> split_csv(const std::string& s) {
-    std::vector<std::string> out;
-    std::stringstream ss(s);
-    std::string item;
-    while (std::getline(ss, item, ',')) {
-        if (!item.empty()) out.push_back(item);
-    }
-    return out;
-}
-
-int main(int argc, char* argv[]) {
-    // --- Parametri di default ---
-    fs::path root = fs::current_path();
-    std::size_t max_total_lines = 3000;      // limite globale
-    std::size_t max_per_file_lines = 0;      // 0 = illimitato per file
-    std::unordered_set<std::string> exclude_dirs = {
-        "node_modules", ".git", "dist", "build", "out", "coverage"
-    };
-
-    // --- Parsing argomenti molto semplice ---
-    for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
-
-        if ((arg == "--root" || arg == "-r") && i + 1 < argc) {
-            root = fs::path(argv[++i]);
-            continue;
-        }
-        if (arg.rfind("--max-lines", 0) == 0) {
-            // accetta sia "--max-lines 2500" che "--max-lines=2500"
-            std::string val;
-            if (arg.find('=') != std::string::npos) val = arg.substr(arg.find('=') + 1);
-            else if (i + 1 < argc) val = argv[++i];
-            if (!val.empty()) max_total_lines = static_cast<std::size_t>(std::stoul(val));
-            continue;
-        }
-        if (arg.rfind("--per-file-lines", 0) == 0) {
-            std::string val;
-            if (arg.find('=') != std::string::npos) val = arg.substr(arg.find('=') + 1);
-            else if (i + 1 < argc) val = argv[++i];
-            if (!val.empty()) max_per_file_lines = static_cast<std::size_t>(std::stoul(val));
-            continue;
-        }
-        if ((arg == "--exclude" || arg == "-x") && i + 1 < argc) {
-            for (auto& d : split_csv(argv[++i])) exclude_dirs.insert(d);
-            continue;
-        }
-        if (arg == "-h" || arg == "--help") {
-            std::cout <<
-                "Usage: project_exporter [--root PATH] [--max-lines N] [--per-file-lines N] "
-                "[--exclude dir1,dir2,...]\n";
-            return 0;
-        }
-    }
-
-    if (!fs::exists(root) || !fs::is_directory(root)) {
-        std::cerr << "Errore: '" << root.string()
-                  << "' non esiste o non è una directory.\n";
-        return 1;
-    }
-
-    std::ofstream out("project-dump.txt");
-    if (!out) {
-        std::cerr << "Errore: impossibile creare 'project-dump.txt'.\n";
-        return 1;
-    }
-
-    out << "=== PROJECT EXPORT ===\n";
-    out << "Root: " << root << "\n\n";
-
-    std::size_t total_lines = 0;
-    std::error_code ec;
-
-    fs::recursive_directory_iterator it(
-        root, fs::directory_options::skip_permission_denied, ec),
-        end;
-
-    for (; it != end; it.increment(ec)) {
-        if (ec) { ec.clear(); continue; }
-
-        const fs::directory_entry& entry = *it;
-        const fs::path path = entry.path();
-
-        // Esclusione directory: disabilita la discesa ricorsiva
-        if (entry.is_directory(ec)) {
-            std::string name = path.filename().string();
-            if (exclude_dirs.count(name)) {
-                it.disable_recursion_pending(); // <-- chiave per NON entrare
-            }
-            continue; // non stampiamo directory
-        }
-
-        if (!entry.is_regular_file(ec)) continue;
-        if (!looks_text_file(path)) continue;
-
-        // Stop se raggiunto limite globale
-        if (total_lines >= max_total_lines && max_total_lines > 0) break;
-
-        auto rel = fs::relative(path, root, ec);
-        if (ec) { rel = path; ec.clear(); }
-
-        out << "\n========================================\n";
-        out << "FILE: " << rel.string() << "\n";
-        out << "----------------------------------------\n";
-
-        std::ifstream in(path);
-        if (!in) {
-            out << "[Impossibile leggere il file]\n";
-            continue;
-        }
-
-        std::string line;
-        std::size_t per_file_count = 0;
-
-        while (std::getline(in, line)) {
-            if (max_total_lines > 0 && total_lines >= max_total_lines) break;
-            if (max_per_file_lines > 0 && per_file_count >= max_per_file_lines) {
-                out << "[… tronco per limite per-file (" << max_per_file_lines << " righe)]\n";
-                break;
-            }
-            out << line << "\n";
-            ++total_lines;
-            ++per_file_count;
-        }
-
-        if (max_total_lines > 0 && total_lines >= max_total_lines) {
-            out << "\n[*** ESPORTAZIONE INTERROTTA: raggiunto limite totale di "
-                << max_total_lines << " righe ***]\n";
-            break;
-        }
-    }
-
-    std::cout << "✔ Esportazione completata: project-dump.txt ("
-              << total_lines << " righe)\n";
-    return 0;
-}
-
-========================================
-FILE: scripts/db-wasm.ts
-----------------------------------------
-import { WasmSQLiteDB, openDb } from './wasm-db';
-import path from 'path';
-
-const DB_PATH = path.resolve(__dirname, '../notes.db');
-
-export async function initSchema(db: WasmSQLiteDB): Promise<void> {
-  console.log('Creating database schema...');
-  
-  // Create main notes table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS notes (
-      id TEXT PRIMARY KEY,
-      path TEXT NOT NULL,
-      title TEXT NOT NULL,
-      created TEXT NOT NULL,
-      updated TEXT NOT NULL,
-      content_hash TEXT NOT NULL,
-      UNIQUE(id)
-    )
-  `);
-  
-  // Create tags table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS note_tags (
-      note_id TEXT NOT NULL,
-      tag TEXT NOT NULL,
-      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
-      UNIQUE(note_id, tag)
-    )
-  `);
-  
-  // Create links table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS note_links (
-      from_id TEXT NOT NULL,
-      to_id TEXT NOT NULL,
-      FOREIGN KEY (from_id) REFERENCES notes(id) ON DELETE CASCADE,
-      UNIQUE(from_id, to_id)
-    )
-  `);
-  
-  // Create search table (simple LIKE-based search)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS note_content (
-      note_id TEXT PRIMARY KEY,
-      content TEXT NOT NULL,
-      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
-    )
-  `);
-  
-  // Create indexes for better performance
-  db.exec('CREATE INDEX IF NOT EXISTS idx_note_tags_note_id ON note_tags(note_id)');
-  db.exec('CREATE INDEX IF NOT EXISTS idx_note_links_from_id ON note_links(from_id)');
-  db.exec('CREATE INDEX IF NOT EXISTS idx_note_content_content ON note_content(content)');
-  
-  console.log('Database schema created successfully');
-}
-
-// Self-executing when run directly
-if (require.main === module) {
-  (async () => {
-    try {
-      const db = await openDb();
-      await initSchema(db);
-      console.log(`✅ Database initialized at ${DB_PATH}`);
-      await db.close();
-    } catch (error) {
-      console.error('❌ Database initialization failed:', error);
-      process.exit(1);
-    }
-  })();
-}
-
-========================================
-FILE: scripts/index-notes.ts
-----------------------------------------
-import * as fs from "fs";
-import * as path from "path";
-const matter = require("gray-matter");
+import chokidar from "chokidar";
+import path from "path";
+import fs from "fs";
+import matter from "gray-matter";
+import crypto from "crypto";
 
 const NOTES_DIR = path.resolve(__dirname, "../notes");
+const INDEX_PATH = path.resolve(__dirname, "../notes-index.json");
 
-type NoteIndex = {
-	id: string;
-	title: string;
-	path: string;
-	created: string;
-	updated: string;
-};
-
-function walk(dir: string): string[] {
-	const entries = fs.readdirSync(dir, { withFileTypes: true});
-	return entries.flatMap((entry) => {
-		const fullPath = path.join(dir, entry.name);
-		if (entry.isDirectory()) return walk(fullPath);
-		if (entry.isFile() && entry.name.endsWith(".md")) return [fullPath];
-		return [];
-	});
+// --- Types ---
+interface Note {
+  id: string;
+  path: string;
+  title: string;
+  created: string;
+  updated: string;
+  tags: string[];
+  links: string[];
+  content: string;
+  content_hash: string;
 }
 
-function indexNotes(): NoteIndex[] {
-	const files = walk(NOTES_DIR);
-	const seenIds = new Set<string>();
-	const index: NoteIndex[] = [];
+class JSONDatabase {
+  private notes: Map<string, Note> = new Map();
 
-	for (const file of files) {
-		const raw = fs.readFileSync(file, "utf8");
-		const parsed = matter(raw);
-		const data = parsed.data as Partial<NoteIndex>;
-		
-		// Minimal validations
-		if (!data.id) {
-			throw new Error(`Duplicate id '${file}`);
-		}
-		if (seenIds.has(data.id)) {
-			throw new Error(`Missing required fields in ${file}`);
-		}
-		if (!data.title || !data.created || !data.updated) {
-			throw new Error(`Missing required fields in ${file}`);
-		}
-
-		seenIds.add(data.id);
-
-		index.push({
-			id: data.id,
-			title: data.title,
-			created: data.created,
-			updated: data.updated,
-			path: path.relative(NOTES_DIR, file),
-		});
-	}
-
-	return index;
-}
-
-// ---- run ----
-try {
-	const notes = indexNotes();
-	console.log("Indexed notes:");
-	for (const note of notes) {
-		console.log(`- [${note.id}] ${note.title} (${note.path})`);
-	}
-	console.log(`\nTotal notes: ${notes.length}`);
-} catch (err) {
-	console.error("Indexing failed:");
-	console.error(err);
-	process.exit(1);
-}
-
-========================================
-FILE: scripts/sqlite-wrapper.ts
-----------------------------------------
-import fs from 'fs';
-import path from 'path';
-import initSqlJs, { Database as SqlJsDatabase, QueryExecResult } from 'sql.js';
-
-export class SQLiteDB {
-  private db: SqlJsDatabase | null = null;
-  private dbPath: string;
-
-  constructor(dbPath: string = './notes.db') {
-    this.dbPath = path.resolve(process.cwd(), dbPath);
+  constructor() {
+    this.load();
   }
 
-  async open(): Promise<void> {
-    if (this.db) return;
-
-    try {
-      const SQL = await initSqlJs();
-      
-      if (fs.existsSync(this.dbPath)) {
-        const fileBuffer = fs.readFileSync(this.dbPath);
-        this.db = new SQL.Database(fileBuffer);
-      } else {
-        this.db = new SQL.Database();
-        // Initialize with default pragmas
-        this.exec(`
-          PRAGMA journal_mode = WAL;
-          PRAGMA synchronous = NORMAL;
-          PRAGMA foreign_keys = ON;
-        `);
+  // Load index from disk if present
+  load() {
+    if (fs.existsSync(INDEX_PATH)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(INDEX_PATH, "utf8"));
+        this.notes.clear();
+        data.forEach((note: Note) => this.notes.set(note.id, note));
+        console.log(`📚 Loaded ${this.notes.size} notes from index`);
+      } catch (err) {
+        console.error("Failed to load index:\n", err);
       }
-    } catch (error) {
-      console.error('Failed to open database:', error);
-      throw error;
     }
   }
 
-  async close(): Promise<void> {
-    if (this.db) {
-      // Save to file
-      const data = this.db.export();
-      const buffer = Buffer.from(data);
-      fs.writeFileSync(this.dbPath, buffer);
-      
-      this.db.close();
-      this.db = null;
-    }
+  save() {
+    fs.writeFileSync(
+      INDEX_PATH,
+      JSON.stringify([...this.notes.values()], null, 2)
+    );
+    console.log(`💾 Saved index (${this.notes.size} notes)`);
   }
 
-  exec(sql: string): void {
-    if (!this.db) throw new Error('Database not open');
-    this.db.exec(sql);
-  }
-
-  run(sql: string, params: any[] = []): { changes: number; lastInsertRowid: number | null } {
-    if (!this.db) throw new Error('Database not open');
-    const stmt = this.db.prepare(sql);
-    stmt.run(params);
-    const changes = this.db.getRowsModified();
-    
-    // Get last insert rowid - handle potential null/undefined
-    let lastInsertRowid: number | null = null;
-    try {
-      const result: QueryExecResult[] = this.db.exec("SELECT last_insert_rowid()");
-      if (result && result.length > 0 && result[0] && result[0].values && result[0].values.length > 0 && result[0].values[0].length > 0) {
-        const value = result[0].values[0][0];
-        if (typeof value === 'number') {
-          lastInsertRowid = value;
-        }
+  removeByPath(relPath: string) {
+    for (const [id, note] of this.notes.entries()) {
+      if (note.path === relPath) {
+        this.notes.delete(id);
+        console.log(`🗑 Removed: ${relPath}`);
+        return;
       }
-    } catch (error) {
-      // Ignore if we can't get last insert rowid
     }
-    
-    stmt.free();
-    return { changes, lastInsertRowid };
   }
 
-  all(sql: string, params: any[] = []): any[] {
-    if (!this.db) throw new Error('Database not open');
-    const stmt = this.db.prepare(sql);
-    const results: any[] = [];
-    stmt.bind(params);
-    while (stmt.step()) {
-      results.push(stmt.getAsObject());
-    }
-    stmt.free();
-    return results;
+  sha256(text: string) {
+    return crypto.createHash("sha256").update(text).digest("hex");
   }
 
-  get(sql: string, params: any[] = []): any {
-    if (!this.db) throw new Error('Database not open');
-    const stmt = this.db.prepare(sql);
-    stmt.bind(params);
-    const result = stmt.step() ? stmt.getAsObject() : null;
-    stmt.free();
-    return result;
-  }
+  parseNote(filePath: string): Note {
+    const raw = fs.readFileSync(filePath, "utf8");
+    const parsed = matter(raw);
 
-  prepare(sql: string): {
-    run: (params?: any[]) => void;
-    all: (params?: any[]) => any[];
-    get: (params?: any[]) => any;
-    finalize: () => void;
-  } {
-    if (!this.db) throw new Error('Database not open');
-    const stmt = this.db.prepare(sql);
-    
+    const data = parsed.data as any;
+    const rel = path.relative(NOTES_DIR, filePath);
+
+    if (!data.id) throw new Error(`Missing id in ${rel}`);
+    if (!data.title) throw new Error(`Missing title in ${rel}`);
+    if (!data.created) throw new Error(`Missing created in ${rel}`);
+    if (!data.updated) throw new Error(`Missing updated in ${rel}`);
+
     return {
-      run: (params = []) => {
-        stmt.run(params);
-      },
-      all: (params = []) => {
-        stmt.bind(params);
-        const results: any[] = [];
-        while (stmt.step()) {
-          results.push(stmt.getAsObject());
-        }
-        stmt.reset();
-        return results;
-      },
-      get: (params = []) => {
-        stmt.bind(params);
-        const result = stmt.step() ? stmt.getAsObject() : null;
-        stmt.reset();
-        return result;
-      },
-      finalize: () => {
-        stmt.free();
-      }
+      id: data.id,
+      title: data.title,
+      created: data.created,
+      updated: data.updated,
+      tags: Array.isArray(data.tags) ? data.tags : [],
+      links: Array.isArray(data.links) ? data.links : [],
+      path: rel,
+      content: parsed.content.trim(),
+      content_hash: this.sha256(raw)
     };
   }
-}
 
-========================================
-FILE: scripts/init-db.ts
-----------------------------------------
-// scripts/init-db.ts
-import { openDb } from './wasm-sqlite-wrapper';
-import path from 'path';
-
-const DB_PATH = path.resolve(__dirname, '../notes.db');
-
-export async function initSchema(db: any): Promise<void> {
-  console.log('Creating database schema...');
-  
-  // Enable foreign keys
-  db.exec("PRAGMA foreign_keys = ON");
-  
-  // Create notes table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS notes (
-      id TEXT PRIMARY KEY,
-      path TEXT NOT NULL,
-      title TEXT NOT NULL,
-      created TEXT NOT NULL,
-      updated TEXT NOT NULL,
-      content_hash TEXT NOT NULL,
-      UNIQUE(id)
-    )
-  `);
-  
-  // Create tags table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS note_tags (
-      note_id TEXT NOT NULL,
-      tag TEXT NOT NULL,
-      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
-      UNIQUE(note_id, tag)
-    )
-  `);
-  
-  // Create links table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS note_links (
-      from_id TEXT NOT NULL,
-      to_id TEXT NOT NULL,
-      FOREIGN KEY (from_id) REFERENCES notes(id) ON DELETE CASCADE,
-      UNIQUE(from_id, to_id)
-    )
-  `);
-  
-  // Create FTS5 virtual table for full-text search
-  db.exec(`
-    CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
-      note_id UNINDEXED,
-      content,
-      tokenize = 'porter unicode61'
-    )
-  `);
-  
-  console.log('✅ Database schema created');
-}
-
-// Self-executing when run directly
-if (require.main === module) {
-  (async () => {
+  upsertFromFile(filePath: string) {
     try {
-      console.log(`Initializing database at ${DB_PATH}...`);
-      
-      const db = await openDb();
-      await initSchema(db);
-      
-      // Test the schema
-      const tables = db.all(`
-        SELECT name FROM sqlite_master 
-        WHERE type='table' 
-        ORDER BY name
-      `);
-      
-      console.log('\nDatabase tables created:');
-      tables.forEach((table: any) => {
-        console.log(`  - ${table.name}`);
-      });
-      
-      await db.close();
-      console.log(`\n✅ Database initialized successfully at ${DB_PATH}`);
-      
-    } catch (error) {
-      console.error('❌ Database initialization failed:', error);
-      process.exit(1);
+      const note = this.parseNote(filePath);
+      this.notes.set(note.id, note);
+      console.log(`✨ Indexed: ${note.path}`);
+      this.save();
+    } catch (err: any) {
+      console.error(`❌ Error parsing ${filePath}:`, err.message);
     }
-  })();
+  }
 }
 
+//
+// --- MAIN WATCHER LOGIC ---
+//
+(async () => {
+  const db = new JSONDatabase();
+
+  console.log("👀 Watching notes folder:", NOTES_DIR);
+
+  const watcher = chokidar.watch(`${NOTES_DIR}/**/*.md`, {
+    ignoreInitial: false,
+    persistent: true,
+  });
+
+  watcher
+    .on("add", (file) => {
+      console.log("\n📄 Added:", file);
+      db.upsertFromFile(file);
+    })
+    .on("change", (file) => {
+      console.log("\n✏️ Modified:", file);
+      db.upsertFromFile(file);
+    })
+    .on("unlink", (file) => {
+      console.log("\n🗑 Deleted:", file);
+      const rel = path.relative(NOTES_DIR, file);
+      db.removeByPath(rel);
+      db.save();
+    });
+
+})();
+
 ========================================
-FILE: scripts/json-db.ts
+FILE: scripts/db.ts
 ----------------------------------------
 // scripts/json-db.ts
 import fs from 'fs';
@@ -1090,212 +522,109 @@ if (require.main === module) {
 }
 
 ========================================
-FILE: scripts/sqljs-wrapper.ts
+FILE: scripts/frontmatter.ts
 ----------------------------------------
-// scripts/sqljs-wrapper.ts
-import fs from 'fs';
-import path from 'path';
-import initSqlJs, { Database } from 'sql.js';
+export function validateFrontmatter(data: any, ctx: string) {
+	functionn ensure(field: string) {
+		if (!data[field]) {
+			throw new Error(`Missing '${field}' in frontmatter: ${ctx}`);
+		}
+	}
 
-const DB_PATH = path.resolve(__dirname, '../notes.db');
+	ensure("id");
+	ensure("title");
+	ensure("created");
+	ensure("updated");
 
-export class SQLJSWrapper {
-  private db: Database | null = null;
-  private dbPath: string;
+	// ISO date strict
+	const iso = /^\d{4}-\d{2}-\d{2}$/;
+	if (!iso.test(data.created)) {
+		throw new Error(`Invalid ISO date 'created' in ${ctx} (expected YYYY-MM-DD)`);
+	}
+	if (!iso.test(data.updated)) {
+		throw new Error(`Invalid ISO date 'updated' in ${ctx} (expected YYYY-MM-DD)`);
+	}
 
-  constructor(dbPath: string = DB_PATH) {
-    this.dbPath = path.resolve(dbPath);
-  }
-
-  async init(): Promise<void> {
-    if (this.db) return;
-
-    try {
-      console.log('Initializing SQL.js...');
-      
-      // Initialize SQL.js
-      const SQL = await initSqlJs({
-        // Use the wasm file from the package
-        locateFile: (file: string) => {
-          // Try local node_modules first
-          const localPath = path.join(__dirname, '../node_modules/sql.js/dist/sql-wasm.wasm');
-          if (fs.existsSync(localPath)) {
-            return localPath;
-          }
-          // Fallback to CDN
-          return `https://sql.js.org/dist/${file}`;
-        }
-      });
-
-      // Load existing database or create new one
-      if (fs.existsSync(this.dbPath)) {
-        console.log(`Loading existing database from ${this.dbPath}`);
-        const buffer = fs.readFileSync(this.dbPath);
-        this.db = new SQL.Database(new Uint8Array(buffer));
-      } else {
-        console.log(`Creating new database at ${this.dbPath}`);
-        this.db = new SQL.Database();
-        // Initialize with pragmas
-        this.exec("PRAGMA journal_mode = WAL");
-        this.exec("PRAGMA synchronous = NORMAL");
-        this.exec("PRAGMA foreign_keys = ON");
-      }
-
-      console.log('SQL.js initialized successfully');
-    } catch (error) {
-      console.error('Failed to initialize SQL.js:', error);
-      throw error;
-    }
-  }
-
-  exec(sql: string): void {
-    if (!this.db) throw new Error('Database not initialized');
-    this.db.run(sql);
-  }
-
-  query(sql: string, params: any[] = []): any[] {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare(sql);
-    if (params && params.length > 0) {
-      stmt.bind(params);
-    }
-    
-    const results: any[] = [];
-    while (stmt.step()) {
-      results.push(stmt.getAsObject());
-    }
-    
-    stmt.free();
-    return results;
-  }
-
-  run(sql: string, params: any[] = []): { changes: number; lastInsertRowid: number } {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    this.exec(sql);
-    
-    return {
-      changes: this.db.getRowsModified(),
-      lastInsertRowid: this.getLastInsertRowid()
-    };
-  }
-
-  private getLastInsertRowid(): number {
-    if (!this.db) return 0;
-    
-    try {
-      const result = this.db.exec("SELECT last_insert_rowid()");
-      
-      // Safe access with optional chaining and nullish checks
-      if (result && 
-          result.length > 0 && 
-          result[0] && 
-          result[0].values && 
-          result[0].values.length > 0 && 
-          result[0].values[0] && 
-          result[0].values[0].length > 0) {
-        
-        const value = result[0].values[0][0];
-        if (typeof value === 'number') {
-          return value;
-        }
-      }
-    } catch (error) {
-      console.warn('Could not get last insert rowid:', error);
-    }
-    
-    return 0;
-  }
-
-  prepare(sql: string): any {
-    if (!this.db) throw new Error('Database not initialized');
-    return this.db.prepare(sql);
-  }
-
-  async close(): Promise<void> {
-    if (this.db) {
-      // Export and save to file
-      const data = this.db.export();
-      const buffer = Buffer.from(data);
-      fs.writeFileSync(this.dbPath, buffer);
-      
-      this.db.close();
-      this.db = null;
-      console.log(`Database saved to ${this.dbPath}`);
-    }
-  }
-
-  transaction(callback: () => void): void {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    try {
-      this.exec("BEGIN TRANSACTION");
-      callback();
-      this.exec("COMMIT");
-    } catch (error) {
-      this.exec("ROLLBACK");
-      throw error;
-    }
-  }
+	// Optional fields normalization
+	data.tags = Array.isArray(data.tags) ? data.tags.map(String) : [];
+	data.links = Array.isArray(data.links) ? data.links.map(String) : [];
+	data.status = data.status ?? "active";
 }
 
-// Factory function
-export async function openDb(dbPath: string = DB_PATH): Promise<SQLJSWrapper> {
-  const db = new SQLJSWrapper(dbPath);
-  await db.init();
-  return db;
+========================================
+FILE: scripts/index-notes.ts
+----------------------------------------
+import * as fs from "fs";
+import * as path from "path";
+const matter = require("gray-matter");
+
+const NOTES_DIR = path.resolve(__dirname, "../notes");
+
+type NoteIndex = {
+	id: string;
+	title: string;
+	path: string;
+	created: string;
+	updated: string;
+};
+
+function walk(dir: string): string[] {
+	const entries = fs.readdirSync(dir, { withFileTypes: true});
+	return entries.flatMap((entry) => {
+		const fullPath = path.join(dir, entry.name);
+		if (entry.isDirectory()) return walk(fullPath);
+		if (entry.isFile() && entry.name.endsWith(".md")) return [fullPath];
+		return [];
+	});
 }
 
-// Test function
-export async function testSQLJS(): Promise<boolean> {
-  try {
-    console.log('Testing SQL.js...');
-    
-    const db = new SQLJSWrapper(':memory:');
-    await db.init();
-    
-    // Create table
-    db.exec(`
-      CREATE TABLE test (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        value INTEGER
-      )
-    `);
-    
-    // Insert data
-    db.run("INSERT INTO test (name, value) VALUES (?, ?)", ["Test 1", 100]);
-    db.run("INSERT INTO test (name, value) VALUES (?, ?)", ["Test 2", 200]);
-    
-    // Query data
-    const results = db.query("SELECT * FROM test");
-    console.log('Query results:', results);
-    
-    // Test transaction
-    db.transaction(() => {
-      db.run("UPDATE test SET value = ? WHERE name = ?", [150, "Test 1"]);
-      db.run("UPDATE test SET value = ? WHERE name = ?", [250, "Test 2"]);
-    });
-    
-    const updated = db.query("SELECT * FROM test");
-    console.log('Updated results:', updated);
-    
-    await db.close();
-    
-    console.log('✅ SQL.js test passed!');
-    return true;
-  } catch (error) {
-    console.error('❌ SQL.js test failed:', error);
-    return false;
-  }
+function indexNotes(): NoteIndex[] {
+	const files = walk(NOTES_DIR);
+	const seenIds = new Set<string>();
+	const index: NoteIndex[] = [];
+
+	for (const file of files) {
+		const raw = fs.readFileSync(file, "utf8");
+		const parsed = matter(raw);
+		const data = parsed.data as Partial<NoteIndex>;
+		
+		// Minimal validations
+		if (!data.id) {
+			throw new Error(`Duplicate id '${file}`);
+		}
+		if (seenIds.has(data.id)) {
+			throw new Error(`Missing required fields in ${file}`);
+		}
+		if (!data.title || !data.created || !data.updated) {
+			throw new Error(`Missing required fields in ${file}`);
+		}
+
+		seenIds.add(data.id);
+
+		index.push({
+			id: data.id,
+			title: data.title,
+			created: data.created,
+			updated: data.updated,
+			path: path.relative(NOTES_DIR, file),
+		});
+	}
+
+	return index;
 }
 
-// Run test if called directly
-if (require.main === module) {
-  testSQLJS().then(success => {
-    process.exit(success ? 0 : 1);
-  });
+// ---- run ----
+try {
+	const notes = indexNotes();
+	console.log("Indexed notes:");
+	for (const note of notes) {
+		console.log(`- [${note.id}] ${note.title} (${note.path})`);
+	}
+	console.log(`\nTotal notes: ${notes.length}`);
+} catch (err) {
+	console.error("Indexing failed:");
+	console.error(err);
+	process.exit(1);
 }
 
 ========================================
@@ -1349,246 +678,6 @@ if (!query) {
 //search().catch(console.error);
 
 ========================================
-FILE: scripts/wasm-sqlite-wrapper.ts
-----------------------------------------
-// scripts/wasm-sqlite-wrapper.ts
-import fs from 'fs';
-import path from 'path';
-
-const DB_PATH = path.resolve(__dirname, '../notes.db');
-
-// Type definitions for sqlite-wasm
-interface SQLiteWASM {
-  version: {
-    libVersion: string;
-    sourceId: string;
-  };
-  oo1: {
-    DB: new (path: string, mode?: string) => any;
-  };
-  opfs?: {
-    OpfsDB: new (path: string, mode?: string) => any;
-  };
-}
-
-export class WasmSQLiteDB {
-  private db: any = null;
-  private dbPath: string;
-  private sqlite3: SQLiteWASM | null = null;
-
-  constructor(dbPath: string = DB_PATH) {
-    this.dbPath = dbPath;
-  }
-
-  async init(): Promise<void> {
-    if (this.db) return;
-
-    try {
-      console.log('Initializing SQLite WASM...');
-      
-      // Import and initialize
-      const initSQLite = (await import('@sqlite.org/sqlite-wasm')).default;
-      this.sqlite3 = await initSQLite({
-        print: console.log,
-        printErr: console.error,
-      });
-      
-      console.log(`SQLite version: ${this.sqlite3.version.libVersion}`);
-      
-      // Check if we can use OPFS (for browsers) or regular file system
-      if (fs.existsSync(this.dbPath)) {
-        console.log(`Loading existing database from ${this.dbPath}...`);
-        const dbBytes = fs.readFileSync(this.dbPath);
-        
-        // Create temporary in-memory DB
-        this.db = new this.sqlite3.oo1.DB(':memory:');
-        
-        // Import the bytes
-        const p = this.sqlite3.wasm.allocFromTypedArray(dbBytes);
-        this.db.close();
-        this.db = new this.sqlite3.oo1.DB(p, 'c');
-        this.sqlite3.wasm.dealloc(p);
-      } else {
-        console.log(`Creating new database at ${this.dbPath}...`);
-        this.db = new this.sqlite3.oo1.DB(this.dbPath, 'c');
-      }
-      
-      // Set pragmas for better performance
-      this.exec("PRAGMA journal_mode = WAL");
-      this.exec("PRAGMA synchronous = NORMAL");
-      this.exec("PRAGMA foreign_keys = ON");
-      this.exec("PRAGMA busy_timeout = 5000");
-      
-      console.log('SQLite WASM initialized successfully');
-      
-    } catch (error) {
-      console.error('Failed to initialize SQLite WASM:', error);
-      throw error;
-    }
-  }
-
-  exec(sql: string): void {
-    if (!this.db) throw new Error('Database not initialized');
-    this.db.exec(sql);
-  }
-
-  run(sql: string, params: any[] = []): { changes: number; lastInsertRowid: number } {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    // Prepare statement
-    const stmt = this.db.prepare(sql);
-    try {
-      if (params && params.length > 0) {
-        stmt.bind(params);
-      }
-      stmt.step();
-      
-      const changes = this.db.changes();
-      const lastInsertRowid = this.db.lastInsertRowid;
-      
-      return { changes, lastInsertRowid };
-    } finally {
-      stmt.finalize();
-    }
-  }
-
-  all(sql: string, params: any[] = []): any[] {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare(sql);
-    try {
-      if (params && params.length > 0) {
-        stmt.bind(params);
-      }
-      
-      const results = [];
-      while (stmt.step()) {
-        results.push(stmt.get({}));
-      }
-      
-      return results;
-    } finally {
-      stmt.finalize();
-    }
-  }
-
-  get(sql: string, params: any[] = []): any {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare(sql);
-    try {
-      if (params && params.length > 0) {
-        stmt.bind(params);
-      }
-      
-      return stmt.step() ? stmt.get({}) : null;
-    } finally {
-      stmt.finalize();
-    }
-  }
-
-  prepare(sql: string): any {
-    if (!this.db) throw new Error('Database not initialized');
-    return this.db.prepare(sql);
-  }
-
-  async close(): Promise<void> {
-    if (this.db && this.sqlite3) {
-      try {
-        // Export database to bytes
-        const bytes = this.db.export();
-        
-        // Save to file
-        if (this.dbPath !== ':memory:') {
-          const buffer = Buffer.from(bytes);
-          fs.writeFileSync(this.dbPath, buffer);
-          console.log(`Database saved to ${this.dbPath}`);
-        }
-        
-        this.db.close();
-        this.db = null;
-        console.log('Database closed');
-      } catch (error) {
-        console.error('Error closing database:', error);
-        throw error;
-      }
-    }
-  }
-
-  transaction<T>(callback: () => T): T {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    this.exec("BEGIN TRANSACTION");
-    try {
-      const result = callback();
-      this.exec("COMMIT");
-      return result;
-    } catch (error) {
-      this.exec("ROLLBACK");
-      throw error;
-    }
-  }
-}
-
-// Factory function to create and initialize database
-export async function openDb(dbPath: string = DB_PATH): Promise<WasmSQLiteDB> {
-  const db = new WasmSQLiteDB(dbPath);
-  await db.init();
-  return db;
-}
-
-// Test function
-export async function testWasmSQLite(): Promise<boolean> {
-  try {
-    console.log('Testing WASM SQLite...');
-    
-    const db = new WasmSQLiteDB(':memory:');
-    await db.init();
-    
-    // Create table
-    db.exec(`
-      CREATE TABLE test_table (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        value INTEGER
-      )
-    `);
-    
-    // Insert data
-    db.run("INSERT INTO test_table (name, value) VALUES (?, ?)", ["Alice", 100]);
-    db.run("INSERT INTO test_table (name, value) VALUES (?, ?)", ["Bob", 200]);
-    
-    // Query data
-    const results = db.all("SELECT * FROM test_table");
-    console.log('Query results:', results);
-    
-    // Test transaction
-    db.transaction(() => {
-      db.run("UPDATE test_table SET value = ? WHERE name = ?", [150, "Alice"]);
-      db.run("UPDATE test_table SET value = ? WHERE name = ?", [250, "Bob"]);
-    });
-    
-    const updated = db.all("SELECT * FROM test_table");
-    console.log('Updated results:', updated);
-    
-    await db.close();
-    
-    console.log('✅ WASM SQLite test passed!');
-    return true;
-  } catch (error) {
-    console.error('❌ WASM SQLite test failed:', error);
-    return false;
-  }
-}
-
-// Run test if called directly
-if (require.main === module) {
-  testWasmSQLite().then(success => {
-    process.exit(success ? 0 : 1);
-  });
-}
-
-========================================
 FILE: scripts/_paths.ts
 ----------------------------------------
 import path from "path";
@@ -1599,375 +688,6 @@ export const APP_DIR = path.resolve(ROOT_DIR, ".app");
 export const DB_PATH = path.resolve(APP_DIR, "index.sqlite");
 
 ========================================
-FILE: scripts/init-db-simple.ts
-----------------------------------------
-// scripts/init-db-simple.ts
-import { openDb } from './sqljs-wrapper';
-import path from 'path';
-
-const DB_PATH = path.resolve(__dirname, '../notes.db');
-
-export async function initSchema(db: any): Promise<void> {
-  console.log('Creating database schema...');
-  
-  // Create notes table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS notes (
-      id TEXT PRIMARY KEY,
-      path TEXT NOT NULL,
-      title TEXT NOT NULL,
-      created TEXT NOT NULL,
-      updated TEXT NOT NULL,
-      content_hash TEXT NOT NULL,
-      UNIQUE(id)
-    )
-  `);
-  
-  // Create tags table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS note_tags (
-      note_id TEXT NOT NULL,
-      tag TEXT NOT NULL,
-      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
-      UNIQUE(note_id, tag)
-    )
-  `);
-  
-  // Create links table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS note_links (
-      from_id TEXT NOT NULL,
-      to_id TEXT NOT NULL,
-      FOREIGN KEY (from_id) REFERENCES notes(id) ON DELETE CASCADE,
-      UNIQUE(from_id, to_id)
-    )
-  `);
-  
-  // Create content table for search (SQL.js doesn't support FTS5, so we'll use LIKE)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS note_content (
-      note_id TEXT PRIMARY KEY,
-      content TEXT NOT NULL,
-      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
-    )
-  `);
-  
-  console.log('✅ Database schema created');
-}
-
-// Self-executing when run directly
-if (require.main === module) {
-  (async () => {
-    try {
-      console.log(`Initializing database at ${DB_PATH}...`);
-      
-      const db = await openDb();
-      await initSchema(db);
-      
-      // List all tables
-      const tables = db.query(`
-        SELECT name FROM sqlite_master 
-        WHERE type='table' 
-        ORDER BY name
-      `);
-      
-      console.log('\nDatabase tables created:');
-      tables.forEach((table: any) => {
-        console.log(`  - ${table.name}`);
-      });
-      
-      await db.close();
-      console.log(`\n✅ Database initialized successfully at ${DB_PATH}`);
-      
-    } catch (error) {
-      console.error('❌ Database initialization failed:', error);
-      process.exit(1);
-    }
-  })();
-}
-
-========================================
-FILE: scripts/reindex.ts
-----------------------------------------
-import fs from "fs";
-import path from "path";
-import crypto from "crypto";
-import matter from "gray-matter";
-//import Database from "better-sqlite3";
-import { SQLiteDB } from "./sqlite-wrapper";
-import { NOTES_DIR } from "./_paths";
-import { openDb, initSchema } from "./init-db";
-
-type Frontmatter = {
-	id: string;
-	title: string;
-	created: string;	// YYYY-MM-DD
-	updated: string;	// YYYY-MM-DD
-	tags?: string[];
-	links?: string[];
-	status?: "draft" | "active" | "archived";
-	source?: string;
-};
-
-type IndexedNote = {
-	id: string;
-	relPath: string;
-	title: string;
-	created: string;
-	updated: string;
-	tags: string[];
-	links: string[];
-	content: string;
-	contentHash: string;
-};
-
-function walk(dir: string): string[] {
-	if (!fs.existsSync(dir)) return [];
-	const entries = fs.readdirSync(dir, { withFileTypes: true });
-	return entries.flatMap((entry) => {
-		const fullPath = path.join(dir, entry.name);
-		if (entry.isDirectory()) return walk(fullPath); 
-		if (entry.isFile() && entry.name.endsWith(".md")) return [fullPath];
-		return [];
-	});
-}
-
-function sha256(text: string): string {
-	return crypto.createHash("sha256").update(text).digest("hex");
-}
-
-function assertIsoDate(d: string, ctx: string) {
-	// YYYY-MM-DD simple
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
-		throw new Error(`Invalid ISO date '${d}' in ${ctx} (expected YYYY-MM-DD)`);
-	}
-}
-
-function parseNote(fileAbsPath: string): IndexedNote {
-	const raw = fs.readFileSync(fileAbsPath, "utf8");
-	const parsed = matter(raw);
-
-	const data = parsed.data as Partial<Frontmatter>;
-	const relPath = path.relative(NOTES_DIR, fileAbsPath);
-
-	if (!data.id) throw new Error(`Missing 'id' in frontmatter: ${relPath}`);
-	if (!data.title) throw new Error(`Missing 'title' in frontmatter: ${relPath}`);
-	if (!data.created) throw new Error(`Missing 'created' in frontmatter: ${relPath}`);
-	if (!data.updated) throw new Error(`Missing 'updated' in frontmatter: ${relPath}`);
-
-	assertIsoDate(data.created, relPath);
-	assertIsoDate(data.updated, relPath);
-	
-	const tags = Array.isArray(data.tags) ? data.tags.map(String) : [];
-	const links = Array.isArray(data.links) ? data.links.map(String) : [];
-
-	// Indexable content: body with no frontmatter
-	const content = (parsed.content ?? "").trim();
-
-	// Hash: full raw to be conservative
-	const contentHash = sha256(raw);
-
-	return {
-		id: String(data.id),
-		relPath,
-		title: String(data.title),
-		created: String(data.created),
-		updated: String(data.updated),
-		tags,
-		links,
-		content,
-		contentHash,
-	};
-}
-
-function reindex(db: SQLiteDB) {
-	initSchema(db);
-
-	const files = walk(NOTES_DIR);
-	const notes: IndexedNote[] = files.map(parseNote);
-
-	// Glob validations (unique ids)
-	const seen = new Set<string>();
-	for (const n of notes) {
-		if (seen.has(n.id)) throw new Error(`Duplicate note id: ${n.id}`);
-		seen.add(n.id);
-	}
-	
-  // Clear existing data
-  db.exec("DELETE FROM note_tags;");
-  db.exec("DELETE FROM note_links;");
-  db.exec("DELETE FROM notes_content;");
-  db.exec("DELETE FROM notes;");
-
-  // Insert new data
-  for (const n of notes) {
-    // Insert note
-    db.run(
-      `INSERT INTO notes (id, path, title, created, updated, content_hash) VALUES (?, ?, ?, ?, ?, ?)`,
-      [n.id, n.relPath, n.title, n.created, n.updated, n.contentHash]
-    );
-
-    // Insert tags
-    for (const tag of n.tags) {
-      db.run(`INSERT INTO note_tags (note_id, tag) VALUES (?, ?)`, [n.id, tag]);
-    }
-
-    // Insert links
-    for (const toId of n.links) {
-      db.run(`INSERT INTO note_links (from_id, to_id) VALUES (?, ?)`, [n.id, toId]);
-    }
-
-    // Insert content for search
-    db.run(`INSERT INTO notes_content (note_id, content) VALUES (?, ?)`, [n.id, n.content]);
-  }
-
-  return { count: notes.length };
-}
-
-if (require.main === module) {
-  (async () => {
-    const db = await openDb();
-    try {
-      const { count } = reindex(db);
-      console.log(`Reindex OK. Notes indexed: ${count}`);
-    } catch(err) {
-      console.error("Reindex failed:");
-      console.error(err);
-      process.exitCode = 1;
-    } finally {
-      await db.close();
-    }
-  })();
-}
-
-			
-
-========================================
-FILE: scripts/wasm-db.ts
-----------------------------------------
-import fs from 'fs';
-import path from 'path';
-
-const DB_PATH = path.resolve(__dirname, '../notes.db');
-
-// We'll use the sqlite-wasm library
-export class WasmSQLiteDB {
-  private db: any = null;
-  private dbPath: string;
-  private sqlite3: any = null;
-
-  constructor(dbPath: string = DB_PATH) {
-    this.dbPath = dbPath;
-  }
-
-  async init(): Promise<void> {
-    // Dynamically import sqlite-wasm
-    const sqlite3 = await import('@sqlite.org/sqlite-wasm');
-    this.sqlite3 = sqlite3;
-    
-    console.log('SQLite version:', sqlite3.version.libVersion);
-    
-    // Create or open database
-    if (fs.existsSync(this.dbPath)) {
-      const dbBytes = fs.readFileSync(this.dbPath);
-      const p = sqlite3.wasm.allocFromTypedArray(dbBytes);
-      this.db = new sqlite3.oo1.DB(p, 'c');
-      sqlite3.wasm.dealloc(p);
-    } else {
-      this.db = new sqlite3.oo1.DB(this.dbPath, 'c');
-    }
-    
-    // Set pragmas
-    this.exec("PRAGMA journal_mode = WAL");
-    this.exec("PRAGMA synchronous = NORMAL");
-    this.exec("PRAGMA foreign_keys = ON");
-  }
-
-  exec(sql: string): void {
-    if (!this.db) throw new Error('Database not initialized');
-    this.db.exec(sql);
-  }
-
-  run(sql: string, params: any[] = []): { changes: number; lastInsertRowid: number } {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare(sql);
-    try {
-      stmt.bind(params);
-      stmt.step();
-      const changes = this.db.changes();
-      const lastInsertRowid = this.db.lastInsertRowid;
-      return { changes, lastInsertRowid };
-    } finally {
-      stmt.finalize();
-    }
-  }
-
-  all(sql: string, params: any[] = []): any[] {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare(sql);
-    try {
-      stmt.bind(params);
-      const results = [];
-      while (stmt.step()) {
-        results.push(stmt.get({}));
-      }
-      return results;
-    } finally {
-      stmt.finalize();
-    }
-  }
-
-  get(sql: string, params: any[] = []): any {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare(sql);
-    try {
-      stmt.bind(params);
-      return stmt.step() ? stmt.get({}) : null;
-    } finally {
-      stmt.finalize();
-    }
-  }
-
-  prepare(sql: string): any {
-    if (!this.db) throw new Error('Database not initialized');
-    return this.db.prepare(sql);
-  }
-
-  async close(): Promise<void> {
-    if (this.db) {
-      // Save to file
-      const bytes = this.db.export();
-      const buffer = Buffer.from(bytes);
-      fs.writeFileSync(this.dbPath, buffer);
-      this.db.close();
-      this.db = null;
-    }
-  }
-
-  transaction(callback: () => void): void {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    this.exec("BEGIN TRANSACTION");
-    try {
-      callback();
-      this.exec("COMMIT");
-    } catch (error) {
-      this.exec("ROLLBACK");
-      throw error;
-    }
-  }
-}
-
-export async function openDb(): Promise<WasmSQLiteDB> {
-  const db = new WasmSQLiteDB();
-  await db.init();
-  return db;
-}
-
-========================================
 FILE: package.json
 ----------------------------------------
 {
@@ -1975,12 +695,14 @@ FILE: package.json
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "index-db": "ts-node scripts/json-db.ts index",
-    "search-db": "ts-node scripts/json-db.ts search",
-    "list-db": "ts-node scripts/json-db.ts list",
-    "stats-db": "ts-node scripts/json-db.ts stats"
+    "index-db": "ts-node scripts/db.ts index",
+    "search-db": "ts-node scripts/db.ts search",
+    "list-db": "ts-node scripts/db.ts list",
+    "stats-db": "ts-node scripts/db.ts stats",
+    "watch-db": "ts-node scripts/watch.ts"
   },
   "dependencies": {
+    "chokidar": "^5.0.0",
     "gray-matter": "^4.0.3"
   },
   "devDependencies": {
@@ -1988,102 +710,6 @@ FILE: package.json
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
-}
-
-========================================
-FILE: project_exporter_exl.cpp
-----------------------------------------
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <filesystem>
-#include <unordered_set>
-#include <vector>
-
-namespace fs = std::filesystem;
-
-bool looks_text_file(const fs::path& p) {
-    static const std::vector<std::string> exts = {
-        ".txt", ".md", ".json", ".js", ".mjs", ".cjs",
-        ".ts", ".tsx", ".css", ".html", ".c", ".h",
-        ".cpp", ".hpp", ".cc", ".hh", ".ino", ".py",
-        ".sh", ".xml", ".yaml", ".yml"
-    };
-
-    auto ext = p.extension().string();
-    for (auto& e : exts)
-        if (ext == e) return true;
-    return false;
-}
-
-int main(int argc, char* argv[]) {
-    fs::path root;
-
-    if (argc >= 2)
-        root = argv[1];
-    else
-        root = fs::current_path();
-
-    if (!fs::exists(root) || !fs::is_directory(root)) {
-        std::cerr << "Errore: '" << root << "' non è una directory valida.\n";
-        return 1;
-    }
-
-    // Directory da escludere completamente
-    const std::unordered_set<std::string> exclude_dirs = {
-        "node_modules",
-        ".git",
-        "dist",
-        "build",
-        "out",
-        "coverage"
-    };
-
-    std::ofstream out("project-dump.txt");
-    if (!out) {
-        std::cerr << "Errore nella creazione del file di output.\n";
-        return 1;
-    }
-
-    for (auto const& entry : fs::recursive_directory_iterator(
-             root,
-             fs::directory_options::skip_permission_denied))
-    {
-        const auto& path = entry.path();
-
-        if (entry.is_directory()) {
-            if (exclude_dirs.count(path.filename().string())) {
-                // Skip entire directory
-                std::cout << ">> Esclusa directory: " << path << "\n";
-                continue;
-            }
-        }
-
-        if (!entry.is_regular_file())
-            continue;
-
-        if (!looks_text_file(path))
-            continue;
-
-        auto rel = fs::relative(path, root);
-
-        out << "\n========================================\n";
-        out << "FILE: " << rel.string() << "\n";
-        out << "----------------------------------------\n";
-
-        std::ifstream in(path);
-        if (!in) {
-            out << "[Impossibile leggere il file]\n";
-            continue;
-        }
-
-        std::string line;
-        while (std::getline(in, line))
-            out << line << "\n";
-    }
-
-    std::cout << "✔ Esportazione completata (project-dump.txt)\n";
-    return 0;
 }
 
 ========================================
@@ -2099,6 +725,9 @@ importers:
 
   .:
     dependencies:
+      chokidar:
+        specifier: ^5.0.0
+        version: 5.0.0
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3
@@ -2159,6 +788,10 @@ packages:
   argparse@1.0.10:
     resolution: {integrity: sha512-o5Roy6tNG4SL/FOkCAN6RzjiakZS25RLYFrcMttJqbdd8BWrnA+fGz57iN5Pb06pvBGvl5gQ0B48dJlslXvoTg==}
 
+  chokidar@5.0.0:
+    resolution: {integrity: sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==}
+    engines: {node: '>= 20.19.0'}
+
   create-require@1.1.1:
     resolution: {integrity: sha512-dcKFX3jn0MpIaXjisoRvexIJVEKzaq7z2rZKxf+MSr9TkdmHmsU4m2lcLojrj/FHl8mk5VxMmYA+ftRkP/3oKQ==}
 
@@ -2193,6 +826,10 @@ packages:
 
   make-error@1.3.6:
     resolution: {integrity: sha512-s8UhlNe7vPKomQhC1qFelMokr/Sc3AgNbso3n74mVPA5LTZwkB9NlXf4XPamLxJE8h0gh73rM94xvwRT2CVInw==}
+
+  readdirp@5.0.0:
+    resolution: {integrity: sha512-9u/XQ1pvrQtYyMpZe7DXKv2p5CNvyVwzUB6uhLAnQwHMSgKMBR62lc7AHljaeteeHXn11XTAaLLUVZYVZyuRBQ==}
+    engines: {node: '>= 20.19.0'}
 
   section-matter@1.0.0:
     resolution: {integrity: sha512-vfD3pmTzGpufjScBh50YHKzEu2lxBWhVEHsNGoEXmCmn2hKGfeNLYMzCJpe8cD7gqX7TJluOVpBkAequ6dgMmA==}
@@ -2273,6 +910,10 @@ snapshots:
     dependencies:
       sprintf-js: 1.0.3
 
+  chokidar@5.0.0:
+    dependencies:
+      readdirp: 5.0.0
+
   create-require@1.1.1: {}
 
   diff@4.0.4: {}
@@ -2300,6 +941,8 @@ snapshots:
   kind-of@6.0.3: {}
 
   make-error@1.3.6: {}
+
+  readdirp@5.0.0: {}
 
   section-matter@1.0.0:
     dependencies:
@@ -2442,63 +1085,6 @@ FILE: docs/indexing-and-db.md
 ## Recovery
 - The DB may be cancelled and rebuilt
 - No information loss
-
-========================================
-FILE: tsconfigOLD.json
-----------------------------------------
-{
-  // Visit https://aka.ms/tsconfig to read more about this file
-  "compilerOptions": {
-    // File Layout
-    "rootDir": ".",
-    "outDir": "./dist",
-
-    // Environment Settings
-    // See also https://aka.ms/tsconfig/module
-    "module": "commonjs",
-    "target": "ES2020",
-    "types": ["node"],
-    "lib": ["ES2020"],
-    // For nodejs:
-    // "lib": ["esnext"],
-    // "types": ["node"],
-    // and npm install -D @types/node
-
-    // Other Outputs
-    "sourceMap": true,
-    "declaration": true,
-    "declarationMap": true,
-
-    // Stricter Typechecking Options
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-
-    // Style Options
-    // "noImplicitReturns": true,
-    // "noImplicitOverride": true,
-    // "noUnusedLocals": true,
-    // "noUnusedParameters": true,
-    // "noFallthroughCasesInSwitch": true,
-    // "noPropertyAccessFromIndexSignature": true,
-
-    // Recommended Options
-    "strict": true,
-    "jsx": "react-jsx",
-    "verbatimModuleSyntax": false,
-    "isolatedModules": true,
-    "noUncheckedSideEffectImports": true,
-    "moduleDetection": "force",
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "moduleResolution": "node",
-    "allowJs": true,
-    "noImplicitAny": true,
-  },
-  "include": ["scripts/**/*", "notes/**/*"],
-  "exclude": ["node_modules", "dist"]
-}
 
 ========================================
 FILE: notes-index.json

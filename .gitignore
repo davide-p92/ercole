@@ -1,3 +1,7 @@
 test*
 packageOLD.json
 tsconfigOLD.json
+node_modules/
+dist/
+.app/
+notes-index.json

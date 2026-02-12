@@ -3,6 +3,13 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+// Source - https://stackoverflow.com/a/50052194
+// Posted by GOTO 0, modified by community. See post 'Timeline' for change history
+// Retrieved 2026-02-12, License - CC BY-SA 4.0
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const NOTES_DIR = path.resolve(__dirname, '../notes');
 const INDEX_PATH = path.resolve(__dirname, '../notes-index.json');
@@ -93,23 +100,83 @@ class JSONDatabase {
   sha256(text: string): string {
     return crypto.createHash('sha256').update(text).digest('hex');
   }
+private lastHashByPath: Map<string, string> = new Map();
 
+// salva immediatamente l'indice? -> gestiremo fuori (watcher) con debounce
+save(): void {
+  const notesArray = Array.from(this.notes.values());
+  fs.writeFileSync(INDEX_PATH, JSON.stringify(notesArray, null, 2));
+  console.log(`✅ Saved ${notesArray.length} notes to ${INDEX_PATH}`);
+}
+
+// nuovo: parseAndMaybeUpsert restituisce true se ha cambiato qualcosa
+parseAndMaybeUpsert(filePath: string): boolean {
+  const raw = fs.readFileSync(filePath, 'utf8');
+  const parsed = matter(raw);
+  const relPath = path.relative(NOTES_DIR, filePath);
+  const data = parsed.data as any;
+
+  // (opzionale) valida frontmatter se vuoi enforcement stretto
+  // validateFrontmatter(data, relPath);
+
+  const today = new Date().toISOString().split("T")[0];
+  const contentHash = this.sha256(raw);
+  const lastHash = this.lastHashByPath.get(relPath);
+  if (lastHash === contentHash) {
+    // contenuto invariato: nessun update necessario
+    return false;
+  }
+
+  // costruisci l'oggetto Note con fallback sicuri
+  const note: Note = {
+    id: (data.id ?? path.basename(filePath, ".md")).toString(),
+    title: (data.title ?? "Untitled").toString(),
+    created: (data.created ?? today).toString(),
+    updated: (data.updated ?? today).toString(),
+    tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
+    links: Array.isArray(data.links) ? data.links.map(String) : [],
+    path: relPath,
+    content: (parsed.content ?? "").trim(),
+    content_hash: contentHash,
+  };
+
+  this.notes.set(note.id, note);
+  this.lastHashByPath.set(relPath, contentHash);
+  console.log(`✨ Indexed: ${note.path}`);
+  return true;
+}
+
+// utile quando rimuovi un file: elimina via path
+removeByPath(relPath: string): boolean {
+  let removed = false;
+  for (const [id, note] of this.notes.entries()) {
+    if (note.path === relPath) {
+      this.notes.delete(id);
+      this.lastHashByPath.delete(relPath);
+      console.log(`🗑 Removed: ${relPath}`);
+      removed = true;
+      break;
+    }
+  }
+  return removed;
+}
   parseNote(filePath: string): Note {
     const raw = fs.readFileSync(filePath, 'utf8');
     const parsed = matter(raw);
     const relPath = path.relative(NOTES_DIR, filePath);
     
     const data = parsed.data as any;
+    const today = new Date().toISOString().split("T")[0];
     
     return {
-      id: data.id || path.basename(filePath, '.md'),
+      id: (data.id ?? path.basename(filePath, '.md')).toString(),
       path: relPath,
-      title: data.title || 'Untitled',
-      created: data.created || new Date().toISOString().split('T')[0],
-      updated: data.updated || new Date().toISOString().split('T')[0],
+      title: (data.title ?? 'Untitled').toString(),
+      created: (data.created ?? today).toString(),
+      updated: (data.updated ?? today).toString(),
       tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
       links: Array.isArray(data.links) ? data.links.map(String) : [],
-      content: (parsed.content || '').trim(),
+      content: (parsed.content ?? '').trim(),
       content_hash: this.sha256(raw)
     };
   }
@@ -258,93 +325,71 @@ const db = new JSONDatabase();
 db.load();
 
 // Command line interface
-if (require.main === module) {
-  const command = process.argv[2];
-  
-  switch (command) {
-    case 'index':
-      console.log('🔍 Indexing notes...');
-      const notes = db.indexNotes();
-      const stats = db.getStats();
-      console.log('\n📊 Summary:');
-      console.log(`  Total notes: ${stats.totalNotes}`);
-      console.log(`  Total tags: ${stats.totalTags}`);
-      console.log(`  Total words: ${stats.totalWords}`);
-      if (stats.topTags.length > 0) {
-        console.log(`  Top tags: ${stats.topTags.map((t: TagStats) => `${t.tag}(${t.count})`).join(', ')}`);
-      }
-      break;
-      
-    case 'search':
-      if (!process.argv[3]) {
-        console.error('Usage: pnpm search "query"');
-        console.error('Example: pnpm search "machine learning"');
-        process.exit(1);
-      }
-      const query = process.argv.slice(3).join(' ');
-      console.log(`🔍 Searching for "${query}"...`);
-      const results = db.search(query);
-      
-      if (results.length === 0) {
-        console.log('No results found.');
-      } else {
-        console.log(`\nFound ${results.length} result(s):\n`);
-        results.forEach((note: Note, i: number) => {
-          console.log(`${i + 1}. [${note.id}] ${note.title}`);
-          console.log(`   Path: ${note.path}`);
-          console.log(`   Updated: ${note.updated}`);
-          if (note.tags.length > 0) {
-            console.log(`   Tags: ${note.tags.join(', ')}`);
-          }
-          // Show excerpt (first 150 chars)
-          const excerpt = note.content.substring(0, 150).replace(/\n/g, ' ');
-          console.log(`   Excerpt: ${excerpt}${note.content.length > 150 ? '...' : ''}\n`);
-        });
-      }
-      break;
-      
-    case 'list':
-      const allNotes = Array.from(db['notes'].values())
-        .sort((a: Note, b: Note) => b.updated.localeCompare(a.updated));
-      
-      console.log(`Total notes: ${allNotes.length}\n`);
-      allNotes.forEach((note: Note) => {
-        console.log(`- [${note.id}] ${note.title}`);
-        console.log(`  ${note.path} (updated: ${note.updated})`);
-        if (note.tags.length > 0) {
-          console.log(`  Tags: ${note.tags.join(', ')}`);
-        }
-        console.log();
-      });
-      break;
-      
-    case 'stats':
-      const statsResult: DatabaseStats = db.getStats();
-      console.log('📈 Statistics:');
-      console.log(`  Total notes: ${statsResult.totalNotes}`);
-      console.log(`  Total tags: ${statsResult.totalTags}`);
-      console.log(`  Total words: ${statsResult.totalWords}`);
-      if (statsResult.topTags.length > 0) {
-        console.log('\n  Top tags:');
-        statsResult.topTags.forEach((tag: TagStats) => {
-          console.log(`    ${tag.tag}: ${tag.count} note${tag.count > 1 ? 's' : ''}`);
-        });
-      }
-      break;
-      
-    default:
-      console.log('📝 Note Management System');
-      console.log('=======================\n');
-      console.log('Usage:');
-      console.log('  pnpm index          - Index all notes');
-      console.log('  pnpm search <query> - Search notes');
-      console.log('  pnpm list           - List all notes');
-      console.log('  pnpm stats          - Show statistics\n');
-      console.log('Examples:');
-      console.log('  pnpm index');
-      console.log('  pnpm search "transformer"');
-      console.log('  pnpm list');
-      console.log('  pnpm stats');
-      process.exit(1);
+// --- CLI ENTRYPOINT (ES MODULE COMPATIBLE) ---
+
+const command = process.argv[2];
+
+if (command === "index") {
+  console.log("🔍 Indexing notes...");
+  const notes = db.indexNotes();
+  const stats = db.getStats();
+  console.log("\n📊 Summary:");
+  console.log(` Total notes: ${stats.totalNotes}`);
+  console.log(` Total tags: ${stats.totalTags}`);
+  console.log(` Total words: ${stats.totalWords}`);
+  if (stats.topTags.length > 0) {
+    console.log(` Top tags: ${stats.topTags.map(t => `${t.tag}(${t.count})`).join(", ")}`);
   }
+} else if (command === "search") {
+  const query = process.argv.slice(3).join(" ").trim();
+  if (!query) {
+    console.error('Usage: pnpm search-db "query"');
+    process.exit(1);
+  }
+  console.log(`🔍 Searching for "${query}"...`);
+  const results = db.search(query);
+  if (results.length === 0) console.log("No results found.");
+  else {
+    console.log(`\nFound ${results.length} result(s):\n`);
+    for (const note of results) {
+      console.log(`- [${note.id}] ${note.title}`);
+      console.log(`  Path: ${note.path}`);
+      console.log(`  Updated: ${note.updated}`);
+      if (note.tags.length > 0) console.log(`  Tags: ${note.tags.join(", ")}`);
+      const excerpt = note.content.substring(0, 150).replace(/\n/g, " ");
+      console.log(`  Excerpt: ${excerpt}${note.content.length > 150 ? "..." : ""}\n`);
+    }
+  }
+} else if (command === "list") {
+  const allNotes = Array.from(db["notes"].values()).sort((a, b) =>
+    b.updated.localeCompare(a.updated)
+  );
+  console.log(`Total notes: ${allNotes.length}\n`);
+  for (const note of allNotes) {
+    console.log(`- [${note.id}] ${note.title}`);
+    console.log(`  ${note.path} (updated: ${note.updated})`);
+    if (note.tags.length > 0) console.log(`  Tags: ${note.tags.join(", ")}`);
+    console.log();
+  }
+} else if (command === "stats") {
+  const stats = db.getStats();
+  console.log("📈 Statistics:");
+  console.log(` Total notes: ${stats.totalNotes}`);
+  console.log(` Total tags: ${stats.totalTags}`);
+  console.log(` Total words: ${stats.totalWords}`);
+  if (stats.topTags.length > 0) {
+    console.log("\n Top tags:");
+    for (const tag of stats.topTags) {
+      console.log(`  ${tag.tag}: ${tag.count}`);
+    }
+  }
+} else {
+  console.log("📝 Note Management System (JSON)");
+  console.log("==============================\n");
+  console.log("Usage:");
+  console.log(" pnpm index-db   - Index all notes");
+  console.log(" pnpm search-db  - Search notes");
+  console.log(" pnpm list-db    - List all notes");
+  console.log(" pnpm stats-db   - Show statistics\n");
 }
+

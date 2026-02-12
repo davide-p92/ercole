@@ -1,5 +1,5 @@
 export function validateFrontmatter(data: any, ctx: string) {
-	functionn ensure(field: string) {
+	function ensure(field: string) {
 		if (!data[field]) {
 			throw new Error(`Missing '${field}' in frontmatter: ${ctx}`);
 		}

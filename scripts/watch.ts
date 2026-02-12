@@ -3,6 +3,11 @@ import path from "path";
 import fs from "fs";
 import matter from "gray-matter";
 import crypto from "crypto";
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { validateFrontmatter } from "./frontmatter.ts";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const NOTES_DIR = path.resolve(__dirname, "../notes");
 const INDEX_PATH = path.resolve(__dirname, "../notes-index.json");
@@ -18,6 +23,25 @@ interface Note {
   links: string[];
   content: string;
   content_hash: string;
+}
+
+
+// --- debounce/batch state ---
+let pendingSaves = false;
+let saveTimer: NodeJS.Timeout | null = null;
+const SAVE_DEBOUNCE_MS = 400; // regola a piacere
+
+function scheduleSave(db: JSONDatabase) {
+  pendingSaves = true;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      db.save();
+    } finally {
+      pendingSaves = false;
+      saveTimer = null;
+    }
+  }, SAVE_DEBOUNCE_MS);
 }
 
 class JSONDatabase {
@@ -58,6 +82,19 @@ class JSONDatabase {
       }
     }
   }
+  upsertFromFile(filePath: string) {
+    try {
+      const changed = this.parseAndMaybeUpsert(filePath);
+      if (changed) {
+        scheduleSave(this);
+      } else {
+        // niente da salvare (hash invariato)
+        // console.log(`↔️ No change: ${path.relative(NOTES_DIR, filePath)}`);
+      }
+    } catch (err: any) {
+      console.error(`❌ Error parsing ${filePath}:`, err.message);
+    }
+  }
 
   sha256(text: string) {
     return crypto.createHash("sha256").update(text).digest("hex");
@@ -69,6 +106,7 @@ class JSONDatabase {
 
     const data = parsed.data as any;
     const rel = path.relative(NOTES_DIR, filePath);
+    validateFrontmatter(data, rel);
 
     if (!data.id) throw new Error(`Missing id in ${rel}`);
     if (!data.title) throw new Error(`Missing title in ${rel}`);
@@ -87,7 +125,7 @@ class JSONDatabase {
       content_hash: this.sha256(raw)
     };
   }
-
+/*
   upsertFromFile(filePath: string) {
     try {
       const note = this.parseNote(filePath);
@@ -97,7 +135,7 @@ class JSONDatabase {
     } catch (err: any) {
       console.error(`❌ Error parsing ${filePath}:`, err.message);
     }
-  }
+  }*/
 }
 
 //
@@ -125,8 +163,8 @@ class JSONDatabase {
     .on("unlink", (file) => {
       console.log("\n🗑 Deleted:", file);
       const rel = path.relative(NOTES_DIR, file);
-      db.removeByPath(rel);
-      db.save();
+      const removed = db.removeByPath(rel);
+      if (removed) scheduleSave(db);
     });
 
 })();
