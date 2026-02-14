@@ -1,8 +1,31 @@
-// tsconfig.json
+===== FILE: ./README.md =====
+
+# Ercole · FS-first Markdown Notes (JSON index)
+
+Ercole is a simple system for managing Markdown notes with **YAML frontmatter** where the **filesystem is the source of truth**. A watcher indexes the `.md` files in `notes/` and maintains a JSON index (`notes-index.json`) for quick searches and statistics.
+
+> Philosophy: **The DB/index is derivable** and can be regenerated at any time. No content lives alone there.
+
+---
+
+## Requirements
+
+- **Node.js >= 20.19** (20.x LTS recommended)
+- **pnpm** (or npm/yarn; the examples here use pnpm)
+
+## Setup
+
+```bash
+pnpm install
+
+
+===== FILE: ./tsconfig.json =====
+
 {
   "compilerOptions": {
-    "target": "es2020",
-    "module": "commonjs",
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -15,7 +38,8 @@
 }
 
 
-// notes-index.json
+===== FILE: ./notes-index.json =====
+
 [
   {
     "id": "hello",
@@ -32,35 +56,120 @@
   }
 ]
 
-// debug-sqlite.js
-// debug-sqlite.js
-async function debugSQLite() {
-  try {
-    console.log('Debugging SQLite WASM import...');
-    
-    // Try different import methods
-    const module1 = await import('@sqlite.org/sqlite-wasm');
-    console.log('Method 1 - Full module:', Object.keys(module1));
-    
-    // Try accessing default
-    console.log('Method 1 - Has default?', 'default' in module1);
-    if (module1.default) {
-      console.log('Method 1 - Default type:', typeof module1.default);
-    }
-    
-    // Try direct properties
-    console.log('Method 1 - Direct version property?', 'version' in module1);
-    console.log('Method 1 - Direct oo1 property?', 'oo1' in module1);
-    
-  } catch (error) {
-    console.error('Debug error:', error);
-  }
-}
 
-debugSQLite();
+===== FILE: ./output.txt =====
 
 
-// scripts/watch.ts
+
+===== FILE: ./notes/hello.md =====
+
+---
+id: hello
+title: "Hello Ercole"
+created: 2026-02-08
+updated: 2026-02-08
+tags: [test]
+links: []
+status: active
+---
+
+Questa è una nota di prova su transformer e latent diffusion.
+
+
+===== FILE: ./docs/indexing-and-db.md =====
+
+# Indexing & Database - Ercole
+
+## Database role
+- Cache deriveable
+- Support to search and graphs
+- Never source of truth
+
+## May contain
+- Indexed text
+- Metadata
+- Relations among notes
+
+## May not contain
+- Contents not present in disk
+- Irreversible states
+- Domain logic
+
+## Recovery
+- The DB may be cancelled and rebuilt
+- No information loss
+
+
+===== FILE: ./docs/note-format.md =====
+
+# Note Format - Ercole
+
+## 1. Source of Truth
+- Every note is a Markdown (.md) file on disk
+- The filesystem is the main source
+- Every index/cache/DB is deriveable and reconstructable
+
+## 2. Position
+- All notes found in `ercole/notes`
+- Subfolders have only organization
+- Path is NOT identity
+
+## 3. Identity
+- Every note has a stable `id`
+- Id may not change even if:
+    - file is renamed
+    - file is moved
+- Id is used for linking, graphs and internal references
+
+## 4. Frontmatter (YAML)
+Every note MUST begin with a valid YAML
+
+### Mandatory fields:
+- `id`: string (UUID or short-id)
+- `title`: string
+- `created`: ISO date
+- `updated`: ISO date
+
+### Optional fields:
+- `tags`: string[]
+- `links`: string[] # IDs of other notes
+- `status`: draft | active | archived
+- `source`: string # e.g. book, URL, project
+
+### Example
+```yaml
+---
+id: 9f2c1a6e
+title: "Coding agent idea"
+created: 2026-02-08
+updated: 2026-02-10
+tags: [ai, coding, agent]
+links: [transformers, diffusion]
+status: active
+---
+
+## Body
+- Standard Markdown
+- Code blocks allowed
+- No mandatory inline HTML
+
+## Rules
+- Path is not identity (may change)
+- ID is identity
+- No note can exist exclusively in DB
+
+
+===== FILE: ./docs/first-flow.md =====
+
+1. User builds or modifies a file .md in ercole/notes
+2. A watcher detects the edit
+3. File is parsed
+4. DB is updated
+5. Search is sensitive to the update
+
+
+===== FILE: ./scripts/watch.ts =====
+
 import chokidar from "chokidar";
 import path from "path";
 import fs from "fs";
@@ -69,11 +178,7 @@ import crypto from "crypto";
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateFrontmatter } from "./frontmatter.ts";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-const NOTES_DIR = path.resolve(__dirname, "../notes");
-const INDEX_PATH = path.resolve(__dirname, "../notes-index.json");
+import { NOTES_DIR, INDEX_PATH } from "./_paths.ts"
 
 // --- Types ---
 interface Note {
@@ -109,6 +214,7 @@ function scheduleSave(db: JSONDatabase) {
 
 class JSONDatabase {
   private notes: Map<string, Note> = new Map();
+  private lastHashByPath = new Map<string, string>();
 
   constructor() {
     this.load();
@@ -145,6 +251,18 @@ class JSONDatabase {
       }
     }
   }
+
+  parseAndMaybeUpsert(filePath: string): boolean {
+    const note = this.parseNote(filePath);
+    const last = this.lastHashByPath.get(note.path);
+    if (last === note.content_hash) return false;
+
+    this.notes.set(note.id, note);
+    this.lashHashByPath.set(note.path, note.content_hash);
+    console.log(`✨ Indexed: ${note.path}`);
+    return true;
+  }
+
   upsertFromFile(filePath: string) {
     try {
       const changed = this.parseAndMaybeUpsert(filePath);
@@ -233,16 +351,23 @@ class JSONDatabase {
 })();
 
 
-// scripts/_paths.ts
-import path from "path";
+===== FILE: ./scripts/_paths.ts =====
+
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const ROOT_DIR = path.resolve(__dirname, "..");
 export const NOTES_DIR = path.resolve(ROOT_DIR, "notes");
 export const APP_DIR = path.resolve(ROOT_DIR, ".app");
 export const DB_PATH = path.resolve(APP_DIR, "index.sqlite");
+export const INDEX_PATH = path.resolve(ROOT_DIR, "notes-index.json");
 
 
-// scripts/frontmatter.ts
+===== FILE: ./scripts/frontmatter.ts =====
+
 export function validateFrontmatter(data: any, ctx: string) {
 	function ensure(field: string) {
 		if (!data[field]) {
@@ -271,7 +396,8 @@ export function validateFrontmatter(data: any, ctx: string) {
 }
 
 
-// scripts/db.ts
+===== FILE: ./scripts/db.ts =====
+
 // scripts/json-db.ts
 import fs from 'fs';
 import path from 'path';
@@ -279,14 +405,15 @@ import matter from 'gray-matter';
 import crypto from 'crypto';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { NOTES_DIR, INDEX_PATH } from "./_paths.ts";
 // Source - https://stackoverflow.com/a/50052194
 // Posted by GOTO 0, modified by community. See post 'Timeline' for change history
 // Retrieved 2026-02-12, License - CC BY-SA 4.0
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const NOTES_DIR = path.resolve(__dirname, '../notes');
-const INDEX_PATH = path.resolve(__dirname, '../notes-index.json');
+//const NOTES_DIR = path.resolve(__dirname, '../notes');
+//const INDEX_PATH = path.resolve(__dirname, '../notes-index.json');
 
 type Note = {
   id: string;
@@ -669,9 +796,11 @@ if (command === "index") {
 
 
 
+===== FILE: ./scripts/search.ts =====
+
 // scripts/search.ts
-// scripts/search.ts
-import fs from "fs";
+import fs from "node:fs";
+import { INDEX_PATH } from "./_paths.ts";
 import path from "path";
 
 const query = process.argv.slice(2).join(" ").trim();
@@ -680,7 +809,7 @@ if (!query) {
   process.exit(1);
 }
 
-const INDEX_PATH = path.resolve(__dirname, "../notes-index.json");
+//const INDEX_PATH = path.resolve(__dirname, "../notes-index.json");
 const data = JSON.parse(fs.readFileSync(INDEX_PATH, "utf8")) as Array<{
   id:string; title:string; path:string; content:string; updated:string; tags:string[];
 }>;
@@ -704,7 +833,8 @@ else {
 }
 
 
-// scripts/index-notes.ts
+===== FILE: ./scripts/index-notes.ts =====
+
 import * as fs from "fs";
 import * as path from "path";
 const matter = require("gray-matter");
@@ -779,19 +909,23 @@ try {
 }
 
 
-// package.json
+===== FILE: ./package.json =====
+
 {
   "name": "ercole",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "engines": { "node": ">=20.19.0" },
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
-    "index-db": "ts-node scripts/db.ts index",
-    "search-db": "ts-node scripts/db.ts search",
-    "list-db": "ts-node scripts/db.ts list",
-    "stats-db": "ts-node scripts/db.ts stats",
-    "watch-db": "node --loader ts-node/esm scripts/watch.ts",
+    "index-db": "tsx scripts/db.ts index",
+    "search-db": "tsx scripts/db.ts search",
+    "list-db1": "node --loader ts-node/esm scripts/db.ts list",
+    "list-db": "tsx scripts/db.ts list",
+    "stats-db": "tsx scripts/db.ts stats",
+    "watch-db": "tsx scripts/watch.ts",
     "lint": "eslint .",
     "format": "prettier -w ."
   },
@@ -801,11 +935,1151 @@ try {
   },
   "devDependencies": {
     "@types/node": "^25.2.2",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3",
     "eslint": "^9",
-    "prettier": "^3"	
+    "prettier": "^3",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }
+
+
+===== FILE: ./project-dump.txt =====
+
+=== PROJECT EXPORT ===
+Root: "/workspaces/codespaces-blank/ercole"
+
+
+========================================
+FILE: tsconfig.json
+----------------------------------------
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "./dist",
+    "rootDir": "./"
+  },
+  "include": ["scripts/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
+
+========================================
+FILE: project-dump.txt
+----------------------------------------
+
+========================================
+FILE: .gitignore
+----------------------------------------
+test*
+packageOLD.json
+tsconfigOLD.json
+
+========================================
+FILE: scripts/watch.ts
+----------------------------------------
+import chokidar from "chokidar";
+import path from "path";
+import fs from "fs";
+import matter from "gray-matter";
+import crypto from "crypto";
+
+const NOTES_DIR = path.resolve(__dirname, "../notes");
+const INDEX_PATH = path.resolve(__dirname, "../notes-index.json");
+
+// --- Types ---
+interface Note {
+  id: string;
+  path: string;
+  title: string;
+  created: string;
+  updated: string;
+  tags: string[];
+  links: string[];
+  content: string;
+  content_hash: string;
+}
+
+class JSONDatabase {
+  private notes: Map<string, Note> = new Map();
+
+  constructor() {
+    this.load();
+  }
+
+  // Load index from disk if present
+  load() {
+    if (fs.existsSync(INDEX_PATH)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(INDEX_PATH, "utf8"));
+        this.notes.clear();
+        data.forEach((note: Note) => this.notes.set(note.id, note));
+        console.log(`📚 Loaded ${this.notes.size} notes from index`);
+      } catch (err) {
+        console.error("Failed to load index:\n", err);
+      }
+    }
+  }
+
+  save() {
+    fs.writeFileSync(
+      INDEX_PATH,
+      JSON.stringify([...this.notes.values()], null, 2)
+    );
+    console.log(`💾 Saved index (${this.notes.size} notes)`);
+  }
+
+  removeByPath(relPath: string) {
+    for (const [id, note] of this.notes.entries()) {
+      if (note.path === relPath) {
+        this.notes.delete(id);
+        console.log(`🗑 Removed: ${relPath}`);
+        return;
+      }
+    }
+  }
+
+  sha256(text: string) {
+    return crypto.createHash("sha256").update(text).digest("hex");
+  }
+
+  parseNote(filePath: string): Note {
+    const raw = fs.readFileSync(filePath, "utf8");
+    const parsed = matter(raw);
+
+    const data = parsed.data as any;
+    const rel = path.relative(NOTES_DIR, filePath);
+
+    if (!data.id) throw new Error(`Missing id in ${rel}`);
+    if (!data.title) throw new Error(`Missing title in ${rel}`);
+    if (!data.created) throw new Error(`Missing created in ${rel}`);
+    if (!data.updated) throw new Error(`Missing updated in ${rel}`);
+
+    return {
+      id: data.id,
+      title: data.title,
+      created: data.created,
+      updated: data.updated,
+      tags: Array.isArray(data.tags) ? data.tags : [],
+      links: Array.isArray(data.links) ? data.links : [],
+      path: rel,
+      content: parsed.content.trim(),
+      content_hash: this.sha256(raw)
+    };
+  }
+
+  upsertFromFile(filePath: string) {
+    try {
+      const note = this.parseNote(filePath);
+      this.notes.set(note.id, note);
+      console.log(`✨ Indexed: ${note.path}`);
+      this.save();
+    } catch (err: any) {
+      console.error(`❌ Error parsing ${filePath}:`, err.message);
+    }
+  }
+}
+
+//
+// --- MAIN WATCHER LOGIC ---
+//
+(async () => {
+  const db = new JSONDatabase();
+
+  console.log("👀 Watching notes folder:", NOTES_DIR);
+
+  const watcher = chokidar.watch(`${NOTES_DIR}/**/*.md`, {
+    ignoreInitial: false,
+    persistent: true,
+  });
+
+  watcher
+    .on("add", (file) => {
+      console.log("\n📄 Added:", file);
+      db.upsertFromFile(file);
+    })
+    .on("change", (file) => {
+      console.log("\n✏️ Modified:", file);
+      db.upsertFromFile(file);
+    })
+    .on("unlink", (file) => {
+      console.log("\n🗑 Deleted:", file);
+      const rel = path.relative(NOTES_DIR, file);
+      db.removeByPath(rel);
+      db.save();
+    });
+
+})();
+
+========================================
+FILE: scripts/db.ts
+----------------------------------------
+// scripts/json-db.ts
+import fs from 'fs';
+import path from 'path';
+import matter from 'gray-matter';
+import crypto from 'crypto';
+
+const NOTES_DIR = path.resolve(__dirname, '../notes');
+const INDEX_PATH = path.resolve(__dirname, '../notes-index.json');
+
+type Note = {
+  id: string;
+  path: string;
+  title: string;
+  created: string;
+  updated: string;
+  tags: string[];
+  links: string[];
+  content: string;
+  content_hash: string;
+};
+
+type TagStats = {
+  tag: string;
+  count: number;
+};
+
+type DatabaseStats = {
+  totalNotes: number;
+  totalTags: number;
+  totalWords: number;
+  topTags: TagStats[];
+};
+
+class JSONDatabase {
+  private notes: Map<string, Note> = new Map();
+  private tagsIndex: Map<string, Set<string>> = new Map();
+  private contentIndex: Map<string, string> = new Map(); // For fast search
+
+  load(): void {
+    if (fs.existsSync(INDEX_PATH)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8'));
+        this.notes.clear();
+        this.tagsIndex.clear();
+        this.contentIndex.clear();
+
+        data.forEach((note: Note) => {
+          this.notes.set(note.id, note);
+          
+          // Index tags
+          note.tags.forEach((tag: string) => {
+            if (!this.tagsIndex.has(tag)) {
+              this.tagsIndex.set(tag, new Set());
+            }
+            const tagSet = this.tagsIndex.get(tag);
+            if (tagSet) {
+              tagSet.add(note.id);
+            }
+          });
+          
+          // Index content for search
+          this.contentIndex.set(note.id, note.content.toLowerCase());
+        });
+
+        console.log(`Loaded ${this.notes.size} notes from index`);
+      } catch (error) {
+        console.error('Failed to load index:', error);
+      }
+    }
+  }
+
+  save(): void {
+    const notesArray = Array.from(this.notes.values());
+    fs.writeFileSync(INDEX_PATH, JSON.stringify(notesArray, null, 2));
+    console.log(`✅ Saved ${notesArray.length} notes to ${INDEX_PATH}`);
+  }
+
+  walk(dir: string): string[] {
+    if (!fs.existsSync(dir)) {
+      console.warn(`Directory does not exist: ${dir}`);
+      return [];
+    }
+    
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    return entries.flatMap((entry: fs.Dirent) => {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) return this.walk(fullPath);
+      if (entry.isFile() && entry.name.endsWith('.md')) return [fullPath];
+      return [];
+    });
+  }
+
+  sha256(text: string): string {
+    return crypto.createHash('sha256').update(text).digest('hex');
+  }
+
+  parseNote(filePath: string): Note {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const parsed = matter(raw);
+    const relPath = path.relative(NOTES_DIR, filePath);
+    
+    const data = parsed.data as any;
+    
+    return {
+      id: data.id || path.basename(filePath, '.md'),
+      path: relPath,
+      title: data.title || 'Untitled',
+      created: data.created || new Date().toISOString().split('T')[0],
+      updated: data.updated || new Date().toISOString().split('T')[0],
+      tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
+      links: Array.isArray(data.links) ? data.links.map(String) : [],
+      content: (parsed.content || '').trim(),
+      content_hash: this.sha256(raw)
+    };
+  }
+
+  indexNotes(): Note[] {
+    console.log(`📁 Scanning ${NOTES_DIR} for markdown files...`);
+    
+    // Check if notes directory exists
+    if (!fs.existsSync(NOTES_DIR)) {
+      console.log(`Creating notes directory at ${NOTES_DIR}...`);
+      fs.mkdirSync(NOTES_DIR, { recursive: true });
+      
+      // Create a sample note
+      const sampleNote = `---
+id: sample-note
+title: Welcome to Your Note System
+created: 2024-01-01
+updated: 2024-01-01
+tags: [welcome, getting-started]
+links: []
+---
+
+# Welcome!
+
+This is your first note. You can:
+
+1. Add more notes in the \`notes/\` directory
+2. Use frontmatter for metadata
+3. Search notes with \`pnpm search "query"\`
+
+## Frontmatter Example
+
+\`\`\`yaml
+---
+id: unique-id
+title: Note Title
+created: YYYY-MM-DD
+updated: YYYY-MM-DD
+tags: [tag1, tag2]
+links: [other-note-id]
+---
+\`\`\``;
+      
+      fs.writeFileSync(path.join(NOTES_DIR, 'welcome.md'), sampleNote);
+    }
+    
+    const files = this.walk(NOTES_DIR);
+    console.log(`📄 Found ${files.length} markdown files`);
+    
+    if (files.length === 0) {
+      console.log('No markdown files found. A sample note has been created.');
+      files.push(path.join(NOTES_DIR, 'welcome.md'));
+    }
+    
+    const notes: Note[] = [];
+    const seenIds = new Set<string>();
+    
+    for (const file of files) {
+      try {
+        const note = this.parseNote(file);
+        
+        if (seenIds.has(note.id)) {
+          console.warn(`⚠️  Duplicate ID: "${note.id}" in ${note.path}`);
+          // Make ID unique
+          note.id = `${note.id}-${Date.now()}`;
+        }
+        seenIds.add(note.id);
+        
+        notes.push(note);
+        console.log(`✓ ${note.path}`);
+      } catch (error: any) {
+        console.error(`✗ Error processing ${file}:`, error.message);
+      }
+    }
+    
+    // Update database
+    this.notes.clear();
+    this.tagsIndex.clear();
+    this.contentIndex.clear();
+    
+    notes.forEach((note: Note) => {
+      this.notes.set(note.id, note);
+      
+      // Index tags
+      note.tags.forEach((tag: string) => {
+        if (!this.tagsIndex.has(tag)) {
+          this.tagsIndex.set(tag, new Set());
+        }
+        const tagSet = this.tagsIndex.get(tag);
+        if (tagSet) {
+          tagSet.add(note.id);
+        }
+      });
+      
+      // Index content for search
+      this.contentIndex.set(note.id, note.content.toLowerCase());
+    });
+    
+    this.save();
+    
+    // Sort by updated date (newest first)
+    notes.sort((a: Note, b: Note) => b.updated.localeCompare(a.updated));
+    
+    return notes;
+  }
+
+  search(query: string): Note[] {
+    const lowerQuery = query.toLowerCase();
+    
+    return Array.from(this.notes.values())
+      .filter((note: Note) => {
+        return note.title.toLowerCase().includes(lowerQuery) ||
+               note.content.toLowerCase().includes(lowerQuery) ||
+               note.tags.some((tag: string) => tag.toLowerCase().includes(lowerQuery)) ||
+               note.id.toLowerCase().includes(lowerQuery);
+      })
+      .sort((a: Note, b: Note) => b.updated.localeCompare(a.updated));
+  }
+
+  getStats(): DatabaseStats {
+    const notes = Array.from(this.notes.values());
+    const tags = new Map<string, number>();
+    
+    notes.forEach((note: Note) => {
+      note.tags.forEach((tag: string) => {
+        tags.set(tag, (tags.get(tag) || 0) + 1);
+      });
+    });
+    
+    const topTags: TagStats[] = Array.from(tags.entries())
+      .sort((a: [string, number], b: [string, number]) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([tag, count]: [string, number]) => ({ tag, count }));
+    
+    return {
+      totalNotes: notes.length,
+      totalTags: tags.size,
+      totalWords: notes.reduce((sum: number, note: Note) => sum + note.content.split(/\s+/).length, 0),
+      topTags
+    };
+  }
+}
+
+// Create and export database instance
+const db = new JSONDatabase();
+db.load();
+
+// Command line interface
+if (require.main === module) {
+  const command = process.argv[2];
+  
+  switch (command) {
+    case 'index':
+      console.log('🔍 Indexing notes...');
+      const notes = db.indexNotes();
+      const stats = db.getStats();
+      console.log('\n📊 Summary:');
+      console.log(`  Total notes: ${stats.totalNotes}`);
+      console.log(`  Total tags: ${stats.totalTags}`);
+      console.log(`  Total words: ${stats.totalWords}`);
+      if (stats.topTags.length > 0) {
+        console.log(`  Top tags: ${stats.topTags.map((t: TagStats) => `${t.tag}(${t.count})`).join(', ')}`);
+      }
+      break;
+      
+    case 'search':
+      if (!process.argv[3]) {
+        console.error('Usage: pnpm search "query"');
+        console.error('Example: pnpm search "machine learning"');
+        process.exit(1);
+      }
+      const query = process.argv.slice(3).join(' ');
+      console.log(`🔍 Searching for "${query}"...`);
+      const results = db.search(query);
+      
+      if (results.length === 0) {
+        console.log('No results found.');
+      } else {
+        console.log(`\nFound ${results.length} result(s):\n`);
+        results.forEach((note: Note, i: number) => {
+          console.log(`${i + 1}. [${note.id}] ${note.title}`);
+          console.log(`   Path: ${note.path}`);
+          console.log(`   Updated: ${note.updated}`);
+          if (note.tags.length > 0) {
+            console.log(`   Tags: ${note.tags.join(', ')}`);
+          }
+          // Show excerpt (first 150 chars)
+          const excerpt = note.content.substring(0, 150).replace(/\n/g, ' ');
+          console.log(`   Excerpt: ${excerpt}${note.content.length > 150 ? '...' : ''}\n`);
+        });
+      }
+      break;
+      
+    case 'list':
+      const allNotes = Array.from(db['notes'].values())
+        .sort((a: Note, b: Note) => b.updated.localeCompare(a.updated));
+      
+      console.log(`Total notes: ${allNotes.length}\n`);
+      allNotes.forEach((note: Note) => {
+        console.log(`- [${note.id}] ${note.title}`);
+        console.log(`  ${note.path} (updated: ${note.updated})`);
+        if (note.tags.length > 0) {
+          console.log(`  Tags: ${note.tags.join(', ')}`);
+        }
+        console.log();
+      });
+      break;
+      
+    case 'stats':
+      const statsResult: DatabaseStats = db.getStats();
+      console.log('📈 Statistics:');
+      console.log(`  Total notes: ${statsResult.totalNotes}`);
+      console.log(`  Total tags: ${statsResult.totalTags}`);
+      console.log(`  Total words: ${statsResult.totalWords}`);
+      if (statsResult.topTags.length > 0) {
+        console.log('\n  Top tags:');
+        statsResult.topTags.forEach((tag: TagStats) => {
+          console.log(`    ${tag.tag}: ${tag.count} note${tag.count > 1 ? 's' : ''}`);
+        });
+      }
+      break;
+      
+    default:
+      console.log('📝 Note Management System');
+      console.log('=======================\n');
+      console.log('Usage:');
+      console.log('  pnpm index          - Index all notes');
+      console.log('  pnpm search <query> - Search notes');
+      console.log('  pnpm list           - List all notes');
+      console.log('  pnpm stats          - Show statistics\n');
+      console.log('Examples:');
+      console.log('  pnpm index');
+      console.log('  pnpm search "transformer"');
+      console.log('  pnpm list');
+      console.log('  pnpm stats');
+      process.exit(1);
+  }
+}
+
+========================================
+FILE: scripts/frontmatter.ts
+----------------------------------------
+export function validateFrontmatter(data: any, ctx: string) {
+	functionn ensure(field: string) {
+		if (!data[field]) {
+			throw new Error(`Missing '${field}' in frontmatter: ${ctx}`);
+		}
+	}
+
+	ensure("id");
+	ensure("title");
+	ensure("created");
+	ensure("updated");
+
+	// ISO date strict
+	const iso = /^\d{4}-\d{2}-\d{2}$/;
+	if (!iso.test(data.created)) {
+		throw new Error(`Invalid ISO date 'created' in ${ctx} (expected YYYY-MM-DD)`);
+	}
+	if (!iso.test(data.updated)) {
+		throw new Error(`Invalid ISO date 'updated' in ${ctx} (expected YYYY-MM-DD)`);
+	}
+
+	// Optional fields normalization
+	data.tags = Array.isArray(data.tags) ? data.tags.map(String) : [];
+	data.links = Array.isArray(data.links) ? data.links.map(String) : [];
+	data.status = data.status ?? "active";
+}
+
+========================================
+FILE: scripts/index-notes.ts
+----------------------------------------
+import * as fs from "fs";
+import * as path from "path";
+const matter = require("gray-matter");
+
+const NOTES_DIR = path.resolve(__dirname, "../notes");
+
+type NoteIndex = {
+	id: string;
+	title: string;
+	path: string;
+	created: string;
+	updated: string;
+};
+
+function walk(dir: string): string[] {
+	const entries = fs.readdirSync(dir, { withFileTypes: true});
+	return entries.flatMap((entry) => {
+		const fullPath = path.join(dir, entry.name);
+		if (entry.isDirectory()) return walk(fullPath);
+		if (entry.isFile() && entry.name.endsWith(".md")) return [fullPath];
+		return [];
+	});
+}
+
+function indexNotes(): NoteIndex[] {
+	const files = walk(NOTES_DIR);
+	const seenIds = new Set<string>();
+	const index: NoteIndex[] = [];
+
+	for (const file of files) {
+		const raw = fs.readFileSync(file, "utf8");
+		const parsed = matter(raw);
+		const data = parsed.data as Partial<NoteIndex>;
+		
+		// Minimal validations
+		if (!data.id) {
+			throw new Error(`Duplicate id '${file}`);
+		}
+		if (seenIds.has(data.id)) {
+			throw new Error(`Missing required fields in ${file}`);
+		}
+		if (!data.title || !data.created || !data.updated) {
+			throw new Error(`Missing required fields in ${file}`);
+		}
+
+		seenIds.add(data.id);
+
+		index.push({
+			id: data.id,
+			title: data.title,
+			created: data.created,
+			updated: data.updated,
+			path: path.relative(NOTES_DIR, file),
+		});
+	}
+
+	return index;
+}
+
+// ---- run ----
+try {
+	const notes = indexNotes();
+	console.log("Indexed notes:");
+	for (const note of notes) {
+		console.log(`- [${note.id}] ${note.title} (${note.path})`);
+	}
+	console.log(`\nTotal notes: ${notes.length}`);
+} catch (err) {
+	console.error("Indexing failed:");
+	console.error(err);
+	process.exit(1);
+}
+
+========================================
+FILE: scripts/search.ts
+----------------------------------------
+import { openDb, initSchema } from "./init-db";
+
+
+const query = process.argv.slice(2).join("").trim();
+if (!query) {
+	console.error('Usage: pnpm search "your query"');
+	process.exit(1);
+}
+
+
+(async () => {
+	const db = await openDb();
+	try {
+		await initSchema(db);
+	// FTS5: MATCH uses FTS syntax (may improve escaping later on
+		const results = db.all(`
+			SELECT
+				n.id,
+				n.title,
+				n.path,
+				snippet(notes_fts, 1, '[', ']', '...', 12) AS snippet
+			FROM notes_fts
+			JOIN notes n ON n.id = notes_fts.note_id
+			WHERE notes_fts MATCH ?
+			ORDER BY rank
+			LIMIT 20;
+		`, [query, query, query, query]);
+
+	//const rows = stmt.all(query) as Array<{ id: string; title: string; path: string; snippet: string }>;
+
+		if (results.length === 0) {
+			console.log("No results.");
+		} else {
+			console.log(`Found ${results.length} results:`);
+			for (const r of results) {
+				console.log(`\n - [${r.id}] ${r.title} (${r.path})`);
+				if (r.snippet) 
+					console.log(`  ${r.snippet}`);
+			}
+		}
+	} finally {
+		await db.close();
+	}
+})().catch(console.error);
+
+//search().catch(console.error);
+
+========================================
+FILE: scripts/_paths.ts
+----------------------------------------
+import path from "path";
+
+export const ROOT_DIR = path.resolve(__dirname, "..");
+export const NOTES_DIR = path.resolve(ROOT_DIR, "notes");
+export const APP_DIR = path.resolve(ROOT_DIR, ".app");
+export const DB_PATH = path.resolve(APP_DIR, "index.sqlite");
+
+========================================
+FILE: package.json
+----------------------------------------
+{
+  "name": "ercole",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "index-db": "ts-node scripts/db.ts index",
+    "search-db": "ts-node scripts/db.ts search",
+    "list-db": "ts-node scripts/db.ts list",
+    "stats-db": "ts-node scripts/db.ts stats",
+    "watch-db": "ts-node scripts/watch.ts"
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "gray-matter": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
+
+========================================
+FILE: pnpm-lock.yaml
+----------------------------------------
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      chokidar:
+        specifier: ^5.0.0
+        version: 5.0.0
+      gray-matter:
+        specifier: ^4.0.3
+        version: 4.0.3
+    devDependencies:
+      '@types/node':
+        specifier: ^25.2.2
+        version: 25.2.2
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@25.2.2)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+packages:
+
+  '@cspotcode/source-map-support@0.8.1':
+    resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
+    engines: {node: '>=12'}
+
+  '@jridgewell/resolve-uri@3.1.2':
+    resolution: {integrity: sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==}
+    engines: {node: '>=6.0.0'}
+
+  '@jridgewell/sourcemap-codec@1.5.5':
+    resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
+
+  '@jridgewell/trace-mapping@0.3.9':
+    resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
+
+  '@tsconfig/node10@1.0.12':
+    resolution: {integrity: sha512-UCYBaeFvM11aU2y3YPZ//O5Rhj+xKyzy7mvcIoAjASbigy8mHMryP5cK7dgjlz2hWxh1g5pLw084E0a/wlUSFQ==}
+
+  '@tsconfig/node12@1.0.11':
+    resolution: {integrity: sha512-cqefuRsh12pWyGsIoBKJA9luFu3mRxCA+ORZvA4ktLSzIuCUtWVxGIuXigEwO5/ywWFMZ2QEGKWvkZG1zDMTag==}
+
+  '@tsconfig/node14@1.0.3':
+    resolution: {integrity: sha512-ysT8mhdixWK6Hw3i1V2AeRqZ5WfXg1G43mqoYlM2nc6388Fq5jcXyr5mRsqViLx/GJYdoL0bfXD8nmF+Zn/Iow==}
+
+  '@tsconfig/node16@1.0.4':
+    resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
+
+  '@types/node@25.2.2':
+    resolution: {integrity: sha512-BkmoP5/FhRYek5izySdkOneRyXYN35I860MFAGupTdebyE66uZaR+bXLHq8k4DirE5DwQi3NuhvRU1jqTVwUrQ==}
+
+  acorn-walk@8.3.4:
+    resolution: {integrity: sha512-ueEepnujpqee2o5aIYnvHU6C0A42MNdsIDeqy5BydrkuC5R1ZuUFnm27EeFJGoEHJQgn3uleRvmTXaJgfXbt4g==}
+    engines: {node: '>=0.4.0'}
+
+  acorn@8.15.0:
+    resolution: {integrity: sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg==}
+    engines: {node: '>=0.4.0'}
+    hasBin: true
+
+  arg@4.1.3:
+    resolution: {integrity: sha512-58S9QDqG0Xx27YwPSt9fJxivjYl432YCwfDMfZ+71RAqUrZef7LrKQZ3LHLOwCS4FLNBplP533Zx895SeOCHvA==}
+
+  argparse@1.0.10:
+    resolution: {integrity: sha512-o5Roy6tNG4SL/FOkCAN6RzjiakZS25RLYFrcMttJqbdd8BWrnA+fGz57iN5Pb06pvBGvl5gQ0B48dJlslXvoTg==}
+
+  chokidar@5.0.0:
+    resolution: {integrity: sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==}
+    engines: {node: '>= 20.19.0'}
+
+  create-require@1.1.1:
+    resolution: {integrity: sha512-dcKFX3jn0MpIaXjisoRvexIJVEKzaq7z2rZKxf+MSr9TkdmHmsU4m2lcLojrj/FHl8mk5VxMmYA+ftRkP/3oKQ==}
+
+  diff@4.0.4:
+    resolution: {integrity: sha512-X07nttJQkwkfKfvTPG/KSnE2OMdcUCao6+eXF3wmnIQRn2aPAHH3VxDbDOdegkd6JbPsXqShpvEOHfAT+nCNwQ==}
+    engines: {node: '>=0.3.1'}
+
+  esprima@4.0.1:
+    resolution: {integrity: sha512-eGuFFw7Upda+g4p+QHvnW0RyTX/SVeJBDM/gCtMARO0cLuT2HcEKnTPvhjV6aGeqrCB/sbNop0Kszm0jsaWU4A==}
+    engines: {node: '>=4'}
+    hasBin: true
+
+  extend-shallow@2.0.1:
+    resolution: {integrity: sha512-zCnTtlxNoAiDc3gqY2aYAWFx7XWWiasuF2K8Me5WbN8otHKTUKBwjPtNpRs/rbUZm7KxWAaNj7P1a/p52GbVug==}
+    engines: {node: '>=0.10.0'}
+
+  gray-matter@4.0.3:
+    resolution: {integrity: sha512-5v6yZd4JK3eMI3FqqCouswVqwugaA9r4dNZB1wwcmrD02QkV5H0y7XBQW8QwQqEaZY1pM9aqORSORhJRdNK44Q==}
+    engines: {node: '>=6.0'}
+
+  is-extendable@0.1.1:
+    resolution: {integrity: sha512-5BMULNob1vgFX6EjQw5izWDxrecWK9AM72rugNr0TFldMOi0fj6Jk+zeKIt0xGj4cEfQIJth4w3OKWOJ4f+AFw==}
+    engines: {node: '>=0.10.0'}
+
+  js-yaml@3.14.2:
+    resolution: {integrity: sha512-PMSmkqxr106Xa156c2M265Z+FTrPl+oxd/rgOQy2tijQeK5TxQ43psO1ZCwhVOSdnn+RzkzlRz/eY4BgJBYVpg==}
+    hasBin: true
+
+  kind-of@6.0.3:
+    resolution: {integrity: sha512-dcS1ul+9tmeD95T+x28/ehLgd9mENa3LsvDTtzm3vyBEO7RPptvAD+t44WVXaUjTBRcrpFeFlC8WCruUR456hw==}
+    engines: {node: '>=0.10.0'}
+
+  make-error@1.3.6:
+    resolution: {integrity: sha512-s8UhlNe7vPKomQhC1qFelMokr/Sc3AgNbso3n74mVPA5LTZwkB9NlXf4XPamLxJE8h0gh73rM94xvwRT2CVInw==}
+
+  readdirp@5.0.0:
+    resolution: {integrity: sha512-9u/XQ1pvrQtYyMpZe7DXKv2p5CNvyVwzUB6uhLAnQwHMSgKMBR62lc7AHljaeteeHXn11XTAaLLUVZYVZyuRBQ==}
+    engines: {node: '>= 20.19.0'}
+
+  section-matter@1.0.0:
+    resolution: {integrity: sha512-vfD3pmTzGpufjScBh50YHKzEu2lxBWhVEHsNGoEXmCmn2hKGfeNLYMzCJpe8cD7gqX7TJluOVpBkAequ6dgMmA==}
+    engines: {node: '>=4'}
+
+  sprintf-js@1.0.3:
+    resolution: {integrity: sha512-D9cPgkvLlV3t3IzL0D0YLvGA9Ahk4PcvVwUbN0dSGr1aP0Nrt4AEnTUbuGvquEC0mA64Gqt1fzirlRs5ibXx8g==}
+
+  strip-bom-string@1.0.0:
+    resolution: {integrity: sha512-uCC2VHvQRYu+lMh4My/sFNmF2klFymLX1wHJeXnbEJERpV/ZsVuonzerjfrGpIGF7LBVa1O7i9kjiWvJiFck8g==}
+    engines: {node: '>=0.10.0'}
+
+  ts-node@10.9.2:
+    resolution: {integrity: sha512-f0FFpIdcHgn8zcPSbf1dRevwt047YMnaiJM3u2w2RewrB+fob/zePZcrOyQoLMMO7aBIddLcQIEK5dYjkLnGrQ==}
+    hasBin: true
+    peerDependencies:
+      '@swc/core': '>=1.2.50'
+      '@swc/wasm': '>=1.2.50'
+      '@types/node': '*'
+      typescript: '>=2.7'
+    peerDependenciesMeta:
+      '@swc/core':
+        optional: true
+      '@swc/wasm':
+        optional: true
+
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+  undici-types@7.16.0:
+    resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
+
+  v8-compile-cache-lib@3.0.1:
+    resolution: {integrity: sha512-wa7YjyUGfNZngI/vtK0UHAN+lgDCxBPCylVXGp0zu59Fz5aiGtNXaq3DhIov063MorB+VfufLh3JlF2KdTK3xg==}
+
+  yn@3.1.1:
+    resolution: {integrity: sha512-Ux4ygGWsu2c7isFWe8Yu1YluJmqVhxqK2cLXNQA5AcC3QfbGNpM7fu0Y8b/z16pXLnFxZYvWhd3fhBY9DLmC6Q==}
+    engines: {node: '>=6'}
+
+snapshots:
+
+  '@cspotcode/source-map-support@0.8.1':
+    dependencies:
+      '@jridgewell/trace-mapping': 0.3.9
+
+  '@jridgewell/resolve-uri@3.1.2': {}
+
+  '@jridgewell/sourcemap-codec@1.5.5': {}
+
+  '@jridgewell/trace-mapping@0.3.9':
+    dependencies:
+      '@jridgewell/resolve-uri': 3.1.2
+      '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@tsconfig/node10@1.0.12': {}
+
+  '@tsconfig/node12@1.0.11': {}
+
+  '@tsconfig/node14@1.0.3': {}
+
+  '@tsconfig/node16@1.0.4': {}
+
+  '@types/node@25.2.2':
+    dependencies:
+      undici-types: 7.16.0
+
+  acorn-walk@8.3.4:
+    dependencies:
+      acorn: 8.15.0
+
+  acorn@8.15.0: {}
+
+  arg@4.1.3: {}
+
+  argparse@1.0.10:
+    dependencies:
+      sprintf-js: 1.0.3
+
+  chokidar@5.0.0:
+    dependencies:
+      readdirp: 5.0.0
+
+  create-require@1.1.1: {}
+
+  diff@4.0.4: {}
+
+  esprima@4.0.1: {}
+
+  extend-shallow@2.0.1:
+    dependencies:
+      is-extendable: 0.1.1
+
+  gray-matter@4.0.3:
+    dependencies:
+      js-yaml: 3.14.2
+      kind-of: 6.0.3
+      section-matter: 1.0.0
+      strip-bom-string: 1.0.0
+
+  is-extendable@0.1.1: {}
+
+  js-yaml@3.14.2:
+    dependencies:
+      argparse: 1.0.10
+      esprima: 4.0.1
+
+  kind-of@6.0.3: {}
+
+  make-error@1.3.6: {}
+
+  readdirp@5.0.0: {}
+
+  section-matter@1.0.0:
+    dependencies:
+      extend-shallow: 2.0.1
+      kind-of: 6.0.3
+
+  sprintf-js@1.0.3: {}
+
+  strip-bom-string@1.0.0: {}
+
+  ts-node@10.9.2(@types/node@25.2.2)(typescript@5.9.3):
+    dependencies:
+      '@cspotcode/source-map-support': 0.8.1
+      '@tsconfig/node10': 1.0.12
+      '@tsconfig/node12': 1.0.11
+      '@tsconfig/node14': 1.0.3
+      '@tsconfig/node16': 1.0.4
+      '@types/node': 25.2.2
+      acorn: 8.15.0
+      acorn-walk: 8.3.4
+      arg: 4.1.3
+      create-require: 1.1.1
+      diff: 4.0.4
+      make-error: 1.3.6
+      typescript: 5.9.3
+      v8-compile-cache-lib: 3.0.1
+      yn: 3.1.1
+
+  typescript@5.9.3: {}
+
+  undici-types@7.16.0: {}
+
+  v8-compile-cache-lib@3.0.1: {}
+
+  yn@3.1.1: {}
+
+========================================
+FILE: notes/hello.md
+----------------------------------------
+---
+id: hello
+title: "Hello Ercole"
+created: 2026-02-08
+updated: 2026-02-08
+tags: [test]
+links: []
+status: active
+---
+
+Questa è una nota di prova su transformer e latent diffusion.
+
+========================================
+FILE: docs/first-flow.md
+----------------------------------------
+1. User builds or modifies a file .md in ercole/notes
+2. A watcher detects the edit
+3. File is parsed
+4. DB is updated
+5. Search is sensitive to the update
+
+========================================
+FILE: docs/note-format.md
+----------------------------------------
+# Note Format - Ercole
+
+## 1. Source of Truth
+- Every note is a Markdown (.md) file on disk
+- The filesystem is the main source
+- Every index/cache/DB is deriveable and reconstructable
+
+## 2. Position
+- All notes found in `ercole/notes`
+- Subfolders have only organization
+- Path is NOT identity
+
+## 3. Identity
+- Every note has a stable `id`
+- Id may not change even if:
+    - file is renamed
+    - file is moved
+- Id is used for linking, graphs and internal references
+
+## 4. Frontmatter (YAML)
+Every note MUST begin with a valid YAML
+
+### Mandatory fields:
+- `id`: string (UUID or short-id)
+- `title`: string
+- `created`: ISO date
+- `updated`: ISO date
+
+### Optional fields:
+- `tags`: string[]
+- `links`: string[] # IDs of other notes
+- `status`: draft | active | archived
+- `source`: string # e.g. book, URL, project
+
+### Example
+```yaml
+---
+id: 9f2c1a6e
+title: "Coding agent idea"
+created: 2026-02-08
+updated: 2026-02-10
+tags: [ai, coding, agent]
+links: [transformers, diffusion]
+status: active
+---
+
+## Body
+- Standard Markdown
+- Code blocks allowed
+- No mandatory inline HTML
+
+## Rules
+- Path is not identity (may change)
+- ID is identity
+- No note can exist exclusively in DB
+
+========================================
+FILE: docs/indexing-and-db.md
+----------------------------------------
+# Indexing & Database - Ercole
+
+## Database role
+- Cache deriveable
+- Support to search and graphs
+- Never source of truth
+
+## May contain
+- Indexed text
+- Metadata
+- Relations among notes
+
+## May not contain
+- Contents not present in disk
+- Irreversible states
+- Domain logic
+
+## Recovery
+- The DB may be cancelled and rebuilt
+- No information loss
+
+========================================
+FILE: notes-index.json
+----------------------------------------
+[
+  {
+    "id": "hello",
+    "path": "hello.md",
+    "title": "Hello Ercole",
+    "created": "2026-02-08T00:00:00.000Z",
+    "updated": "2026-02-08T00:00:00.000Z",
+    "tags": [
+      "test"
+    ],
+    "links": [],
+    "content": "Questa è una nota di prova su transformer e latent diffusion.",
+    "content_hash": "ab897c92a9792574f7e757fc3bda8aa7e5f049a0f75f2aa4f09bc230cfd4a21a"
+  }
+]
+
+========================================
+FILE: debug-sqlite.js
+----------------------------------------
+// debug-sqlite.js
+async function debugSQLite() {
+  try {
+    console.log('Debugging SQLite WASM import...');
+    
+    // Try different import methods
+    const module1 = await import('@sqlite.org/sqlite-wasm');
+    console.log('Method 1 - Full module:', Object.keys(module1));
+    
+    // Try accessing default
+    console.log('Method 1 - Has default?', 'default' in module1);
+    if (module1.default) {
+      console.log('Method 1 - Default type:', typeof module1.default);
+    }
+    
+    // Try direct properties
+    console.log('Method 1 - Direct version property?', 'version' in module1);
+    console.log('Method 1 - Direct oo1 property?', 'oo1' in module1);
+    
+  } catch (error) {
+    console.error('Debug error:', error);
+  }
+}
+
+debugSQLite();
 
 

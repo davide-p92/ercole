@@ -86,7 +86,7 @@ class JSONDatabase {
     if (last === note.content_hash) return false;
 
     this.notes.set(note.id, note);
-    this.lashHashByPath.set(note.path, note.content_hash);
+    this.lastHashByPath.set(note.path, note.content_hash);
     console.log(`✨ Indexed: ${note.path}`);
     return true;
   }
