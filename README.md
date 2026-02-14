@@ -125,6 +125,22 @@ Shows:
 - Word n.
 - Top tags
 
+## 🧩 Project Philosophy
+Ercole was born with three principles:
+
+Filesystem-first → .md files are the truth.
+Derivable index → ​​never depend on a database.
+Complete portability → local, GitHub Codespaces, containers.
+
+This approach avoids lock-in, maintains absolute simplicity, and facilitates hackability.
+
+## 🛣 Roadmap
+
+Static web viewer (note view + graph)
+Automatic backlinks (built from links)
+VS Code Extensions / Unified CLI Ercole <cmd>
+Selective exports (by tag, by range, by project)
+
 ## 📜 License
 MIT
 
