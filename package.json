@@ -8,13 +8,18 @@
   },
   "scripts": {
     "index-db": "tsx scripts/db.ts index",
-    "search-db": "tsx scripts/db.ts search",
+    "search-db": "tsx scripts/search.ts",
+    "search-db:silent": "pnpm --silent search-db",
     "list-db1": "node --loader ts-node/esm scripts/db.ts list",
     "list-db": "tsx scripts/db.ts list",
     "stats-db": "tsx scripts/db.ts stats",
     "watch-db": "tsx scripts/watch.ts",
+    "export": "tsx scripts/export.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint .",
-    "format": "prettier -w ."
+    "format": "prettier -w .",
+    "graph": "tsx scripts/graph.ts"
   },
   "dependencies": {
     "chokidar": "^5.0.0",
@@ -26,6 +31,7 @@
     "prettier": "^3",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }
