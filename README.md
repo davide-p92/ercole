@@ -35,13 +35,12 @@ The filesystem is the *source of truth*: everything else (index, graph, statisti
 
 ```bash
 pnpm install
-
+```
 ## 📝 Note Format
 
 Every note must begin with a YAML frontmatter:
 
-
-
+```yaml
 id: my-note-id
 title: "Note title"
 created: 2026-02-08
@@ -51,6 +50,7 @@ links: [altra-nota]
 status: active       # optional: draft|active|archived
 ---
 Free md content…
+```
 
 ## Fundamental Rules:
 
@@ -60,50 +60,62 @@ No note can exist only in the index or database: it must always exist on the fil
 
 ## 🔧 Main commands
 ## ▶️ Index all notes
-
+```bash
 pnpm index-db
-
+```
 Generates / updates notes-index.json
 
 ## ▶️ Search (advanced)
 Examples:
 # Base search
+```bash
 pnpm --silent search-db "transformer" --json | jq .
-
+```
 # AND (implicit)
+```bash
 pnpm search-db "transformer diffusion"
-
+```
 # OR
+```bash
 pnpm search-db "transformer OR diffusion"
-
+```
 # NOT
+```bash
 pnpm search-db "transformer -draft"
 pnpm search-db "transformer NOT draft"
-
+```
 # Filters
+```bash
 pnpm search-db "ai" --tag test
 pnpm search-db "ai" --after 2026-02-01
 pnpm search-db "ai" --before 2026-02-28
-
+```
 # Paging
+```bash
 pnpm search-db "ai" --limit 20 --offset 40 --json | jq .
 
 # Pure JSON mode (pipeline jq)
 Use pnpm --silent to avoid banner:
+```bash
 pnpm --silent search-db "transformer" --json | jq .
-
+```
 ## 👁 Live Watcher
 Automatically updates the table of contents as you edit notes:
+```bash
 pnpm watch-db
+```
 
 Includes:
 - Debounce (reduces writes)
 - SHA-256 hash detection to avoid unnecessary re-indexing
 
 ## 🔗 Graph generation (links → graph.json)
+```bash
 pnpm graph
+```
 
 Creates:
+```json
 {
   "nodes": [...],
   "edges": [...],
@@ -113,12 +125,13 @@ Creates:
     "generatedAt": "2026-02-14T..."
   }
 }
-
+```
 Usable for viewer web, d3-force, analysis, mental maps.
 
 ## 📊 Stats
+```bash
 pnpm stats-db
-
+```
 Shows:
 - Note n.
 - Tag n.
