@@ -1,3 +1,277 @@
+// tsconfig.json
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "./dist",
+    "rootDir": "./"
+  },
+  "include": ["scripts/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
+
+
+// notes-index.json
+[
+  {
+    "id": "hello",
+    "path": "hello.md",
+    "title": "Hello Ercole",
+    "created": "Sun Feb 08 2026 00:00:00 GMT+0000 (Coordinated Universal Time)",
+    "updated": "Sun Feb 08 2026 00:00:00 GMT+0000 (Coordinated Universal Time)",
+    "tags": [
+      "test"
+    ],
+    "links": [],
+    "content": "Questa è una nota di prova su transformer e latent diffusion.",
+    "content_hash": "ab897c92a9792574f7e757fc3bda8aa7e5f049a0f75f2aa4f09bc230cfd4a21a"
+  }
+]
+
+// debug-sqlite.js
+// debug-sqlite.js
+async function debugSQLite() {
+  try {
+    console.log('Debugging SQLite WASM import...');
+    
+    // Try different import methods
+    const module1 = await import('@sqlite.org/sqlite-wasm');
+    console.log('Method 1 - Full module:', Object.keys(module1));
+    
+    // Try accessing default
+    console.log('Method 1 - Has default?', 'default' in module1);
+    if (module1.default) {
+      console.log('Method 1 - Default type:', typeof module1.default);
+    }
+    
+    // Try direct properties
+    console.log('Method 1 - Direct version property?', 'version' in module1);
+    console.log('Method 1 - Direct oo1 property?', 'oo1' in module1);
+    
+  } catch (error) {
+    console.error('Debug error:', error);
+  }
+}
+
+debugSQLite();
+
+
+// scripts/watch.ts
+import chokidar from "chokidar";
+import path from "path";
+import fs from "fs";
+import matter from "gray-matter";
+import crypto from "crypto";
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { validateFrontmatter } from "./frontmatter.ts";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const NOTES_DIR = path.resolve(__dirname, "../notes");
+const INDEX_PATH = path.resolve(__dirname, "../notes-index.json");
+
+// --- Types ---
+interface Note {
+  id: string;
+  path: string;
+  title: string;
+  created: string;
+  updated: string;
+  tags: string[];
+  links: string[];
+  content: string;
+  content_hash: string;
+}
+
+
+// --- debounce/batch state ---
+let pendingSaves = false;
+let saveTimer: NodeJS.Timeout | null = null;
+const SAVE_DEBOUNCE_MS = 400; // regola a piacere
+
+function scheduleSave(db: JSONDatabase) {
+  pendingSaves = true;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      db.save();
+    } finally {
+      pendingSaves = false;
+      saveTimer = null;
+    }
+  }, SAVE_DEBOUNCE_MS);
+}
+
+class JSONDatabase {
+  private notes: Map<string, Note> = new Map();
+
+  constructor() {
+    this.load();
+  }
+
+  // Load index from disk if present
+  load() {
+    if (fs.existsSync(INDEX_PATH)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(INDEX_PATH, "utf8"));
+        this.notes.clear();
+        data.forEach((note: Note) => this.notes.set(note.id, note));
+        console.log(`📚 Loaded ${this.notes.size} notes from index`);
+      } catch (err) {
+        console.error("Failed to load index:\n", err);
+      }
+    }
+  }
+
+  save() {
+    fs.writeFileSync(
+      INDEX_PATH,
+      JSON.stringify([...this.notes.values()], null, 2)
+    );
+    console.log(`💾 Saved index (${this.notes.size} notes)`);
+  }
+
+  removeByPath(relPath: string) {
+    for (const [id, note] of this.notes.entries()) {
+      if (note.path === relPath) {
+        this.notes.delete(id);
+        console.log(`🗑 Removed: ${relPath}`);
+        return;
+      }
+    }
+  }
+  upsertFromFile(filePath: string) {
+    try {
+      const changed = this.parseAndMaybeUpsert(filePath);
+      if (changed) {
+        scheduleSave(this);
+      } else {
+        // niente da salvare (hash invariato)
+        // console.log(`↔️ No change: ${path.relative(NOTES_DIR, filePath)}`);
+      }
+    } catch (err: any) {
+      console.error(`❌ Error parsing ${filePath}:`, err.message);
+    }
+  }
+
+  sha256(text: string) {
+    return crypto.createHash("sha256").update(text).digest("hex");
+  }
+
+  parseNote(filePath: string): Note {
+    const raw = fs.readFileSync(filePath, "utf8");
+    const parsed = matter(raw);
+
+    const data = parsed.data as any;
+    const rel = path.relative(NOTES_DIR, filePath);
+    validateFrontmatter(data, rel);
+
+    if (!data.id) throw new Error(`Missing id in ${rel}`);
+    if (!data.title) throw new Error(`Missing title in ${rel}`);
+    if (!data.created) throw new Error(`Missing created in ${rel}`);
+    if (!data.updated) throw new Error(`Missing updated in ${rel}`);
+
+    return {
+      id: data.id,
+      title: data.title,
+      created: data.created,
+      updated: data.updated,
+      tags: Array.isArray(data.tags) ? data.tags : [],
+      links: Array.isArray(data.links) ? data.links : [],
+      path: rel,
+      content: parsed.content.trim(),
+      content_hash: this.sha256(raw)
+    };
+  }
+/*
+  upsertFromFile(filePath: string) {
+    try {
+      const note = this.parseNote(filePath);
+      this.notes.set(note.id, note);
+      console.log(`✨ Indexed: ${note.path}`);
+      this.save();
+    } catch (err: any) {
+      console.error(`❌ Error parsing ${filePath}:`, err.message);
+    }
+  }*/
+}
+
+//
+// --- MAIN WATCHER LOGIC ---
+//
+(async () => {
+  const db = new JSONDatabase();
+
+  console.log("👀 Watching notes folder:", NOTES_DIR);
+
+  const watcher = chokidar.watch(`${NOTES_DIR}/**/*.md`, {
+    ignoreInitial: false,
+    persistent: true,
+  });
+
+  watcher
+    .on("add", (file) => {
+      console.log("\n📄 Added:", file);
+      db.upsertFromFile(file);
+    })
+    .on("change", (file) => {
+      console.log("\n✏️ Modified:", file);
+      db.upsertFromFile(file);
+    })
+    .on("unlink", (file) => {
+      console.log("\n🗑 Deleted:", file);
+      const rel = path.relative(NOTES_DIR, file);
+      const removed = db.removeByPath(rel);
+      if (removed) scheduleSave(db);
+    });
+
+})();
+
+
+// scripts/_paths.ts
+import path from "path";
+
+export const ROOT_DIR = path.resolve(__dirname, "..");
+export const NOTES_DIR = path.resolve(ROOT_DIR, "notes");
+export const APP_DIR = path.resolve(ROOT_DIR, ".app");
+export const DB_PATH = path.resolve(APP_DIR, "index.sqlite");
+
+
+// scripts/frontmatter.ts
+export function validateFrontmatter(data: any, ctx: string) {
+	function ensure(field: string) {
+		if (!data[field]) {
+			throw new Error(`Missing '${field}' in frontmatter: ${ctx}`);
+		}
+	}
+
+	ensure("id");
+	ensure("title");
+	ensure("created");
+	ensure("updated");
+
+	// ISO date strict
+	const iso = /^\d{4}-\d{2}-\d{2}$/;
+	if (!iso.test(data.created)) {
+		throw new Error(`Invalid ISO date 'created' in ${ctx} (expected YYYY-MM-DD)`);
+	}
+	if (!iso.test(data.updated)) {
+		throw new Error(`Invalid ISO date 'updated' in ${ctx} (expected YYYY-MM-DD)`);
+	}
+
+	// Optional fields normalization
+	data.tags = Array.isArray(data.tags) ? data.tags.map(String) : [];
+	data.links = Array.isArray(data.links) ? data.links.map(String) : [];
+	data.status = data.status ?? "active";
+}
+
+
+// scripts/db.ts
 // scripts/json-db.ts
 import fs from 'fs';
 import path from 'path';
@@ -5,15 +279,14 @@ import matter from 'gray-matter';
 import crypto from 'crypto';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NOTES_DIR, INDEX_PATH } from "./_paths.ts";
 // Source - https://stackoverflow.com/a/50052194
 // Posted by GOTO 0, modified by community. See post 'Timeline' for change history
 // Retrieved 2026-02-12, License - CC BY-SA 4.0
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-//const NOTES_DIR = path.resolve(__dirname, '../notes');
-//const INDEX_PATH = path.resolve(__dirname, '../notes-index.json');
+const NOTES_DIR = path.resolve(__dirname, '../notes');
+const INDEX_PATH = path.resolve(__dirname, '../notes-index.json');
 
 type Note = {
   id: string;
@@ -393,4 +666,146 @@ if (command === "index") {
   console.log(" pnpm list-db    - List all notes");
   console.log(" pnpm stats-db   - Show statistics\n");
 }
+
+
+
+// scripts/search.ts
+// scripts/search.ts
+import fs from "fs";
+import path from "path";
+
+const query = process.argv.slice(2).join(" ").trim();
+if (!query) {
+  console.error('Usage: pnpm search-db "your query"');
+  process.exit(1);
+}
+
+const INDEX_PATH = path.resolve(__dirname, "../notes-index.json");
+const data = JSON.parse(fs.readFileSync(INDEX_PATH, "utf8")) as Array<{
+  id:string; title:string; path:string; content:string; updated:string; tags:string[];
+}>;
+
+const q = query.toLowerCase();
+const results = data.filter(n =>
+  n.title.toLowerCase().includes(q) ||
+  n.content.toLowerCase().includes(q) ||
+  n.tags.some(t => t.toLowerCase().includes(q)) ||
+  n.id.toLowerCase().includes(q)
+).sort((a,b) => b.updated.localeCompare(a.updated));
+
+if (results.length === 0) console.log("No results.");
+else {
+  console.log(`Found ${results.length} results:`);
+  for (const r of results) {
+    const ex = (r.content ?? "").slice(0, 150).replace(/\n/g, " ");
+    console.log(`\n - [${r.id}] ${r.title} (${r.path})`);
+    if (ex) console.log(`   ${ex}${r.content.length>150?"...":""}`);
+  }
+}
+
+
+// scripts/index-notes.ts
+import * as fs from "fs";
+import * as path from "path";
+const matter = require("gray-matter");
+
+const NOTES_DIR = path.resolve(__dirname, "../notes");
+
+type NoteIndex = {
+	id: string;
+	title: string;
+	path: string;
+	created: string;
+	updated: string;
+};
+
+function walk(dir: string): string[] {
+	const entries = fs.readdirSync(dir, { withFileTypes: true});
+	return entries.flatMap((entry) => {
+		const fullPath = path.join(dir, entry.name);
+		if (entry.isDirectory()) return walk(fullPath);
+		if (entry.isFile() && entry.name.endsWith(".md")) return [fullPath];
+		return [];
+	});
+}
+
+function indexNotes(): NoteIndex[] {
+	const files = walk(NOTES_DIR);
+	const seenIds = new Set<string>();
+	const index: NoteIndex[] = [];
+
+	for (const file of files) {
+		const raw = fs.readFileSync(file, "utf8");
+		const parsed = matter(raw);
+		const data = parsed.data as Partial<NoteIndex>;
+		
+		// Minimal validations
+		if (!data.id) {
+			throw new Error(`Duplicate id '${file}`);
+		}
+		if (seenIds.has(data.id)) {
+			throw new Error(`Missing required fields in ${file}`);
+		}
+		if (!data.title || !data.created || !data.updated) {
+			throw new Error(`Missing required fields in ${file}`);
+		}
+
+		seenIds.add(data.id);
+
+		index.push({
+			id: data.id,
+			title: data.title,
+			created: data.created,
+			updated: data.updated,
+			path: path.relative(NOTES_DIR, file),
+		});
+	}
+
+	return index;
+}
+
+// ---- run ----
+try {
+	const notes = indexNotes();
+	console.log("Indexed notes:");
+	for (const note of notes) {
+		console.log(`- [${note.id}] ${note.title} (${note.path})`);
+	}
+	console.log(`\nTotal notes: ${notes.length}`);
+} catch (err) {
+	console.error("Indexing failed:");
+	console.error(err);
+	process.exit(1);
+}
+
+
+// package.json
+{
+  "name": "ercole",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": { "node": ">=20.19.0" },
+  "scripts": {
+    "index-db": "ts-node scripts/db.ts index",
+    "search-db": "ts-node scripts/db.ts search",
+    "list-db": "ts-node scripts/db.ts list",
+    "stats-db": "ts-node scripts/db.ts stats",
+    "watch-db": "node --loader ts-node/esm scripts/watch.ts",
+    "lint": "eslint .",
+    "format": "prettier -w ."
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "gray-matter": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "eslint": "^9",
+    "prettier": "^3"	
+  }
+}
+
 

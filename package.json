@@ -3,13 +3,16 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "engines": { "node": ">=20.19.0" },
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
-    "index-db": "ts-node scripts/db.ts index",
-    "search-db": "ts-node scripts/db.ts search",
-    "list-db": "ts-node scripts/db.ts list",
-    "stats-db": "ts-node scripts/db.ts stats",
-    "watch-db": "ts-node scripts/watch.ts",
+    "index-db": "tsx scripts/db.ts index",
+    "search-db": "tsx scripts/db.ts search",
+    "list-db1": "node --loader ts-node/esm scripts/db.ts list",
+    "list-db": "tsx scripts/db.ts list",
+    "stats-db": "tsx scripts/db.ts stats",
+    "watch-db": "tsx scripts/watch.ts",
     "lint": "eslint .",
     "format": "prettier -w ."
   },
@@ -19,9 +22,10 @@
   },
   "devDependencies": {
     "@types/node": "^25.2.2",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3",
     "eslint": "^9",
-    "prettier": "^3"	
+    "prettier": "^3",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }

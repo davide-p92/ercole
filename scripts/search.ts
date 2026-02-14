@@ -1,5 +1,6 @@
 // scripts/search.ts
-import fs from "fs";
+import fs from "node:fs";
+import { INDEX_PATH } from "./_paths.ts";
 import path from "path";
 
 const query = process.argv.slice(2).join(" ").trim();
@@ -8,7 +9,7 @@ if (!query) {
   process.exit(1);
 }
 
-const INDEX_PATH = path.resolve(__dirname, "../notes-index.json");
+//const INDEX_PATH = path.resolve(__dirname, "../notes-index.json");
 const data = JSON.parse(fs.readFileSync(INDEX_PATH, "utf8")) as Array<{
   id:string; title:string; path:string; content:string; updated:string; tags:string[];
 }>;

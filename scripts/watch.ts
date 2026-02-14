@@ -6,11 +6,7 @@ import crypto from "crypto";
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateFrontmatter } from "./frontmatter.ts";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-const NOTES_DIR = path.resolve(__dirname, "../notes");
-const INDEX_PATH = path.resolve(__dirname, "../notes-index.json");
+import { NOTES_DIR, INDEX_PATH } from "./_paths.ts"
 
 // --- Types ---
 interface Note {
@@ -46,6 +42,7 @@ function scheduleSave(db: JSONDatabase) {
 
 class JSONDatabase {
   private notes: Map<string, Note> = new Map();
+  private lastHashByPath = new Map<string, string>();
 
   constructor() {
     this.load();
@@ -82,6 +79,18 @@ class JSONDatabase {
       }
     }
   }
+
+  parseAndMaybeUpsert(filePath: string): boolean {
+    const note = this.parseNote(filePath);
+    const last = this.lastHashByPath.get(note.path);
+    if (last === note.content_hash) return false;
+
+    this.notes.set(note.id, note);
+    this.lashHashByPath.set(note.path, note.content_hash);
+    console.log(`✨ Indexed: ${note.path}`);
+    return true;
+  }
+
   upsertFromFile(filePath: string) {
     try {
       const changed = this.parseAndMaybeUpsert(filePath);
