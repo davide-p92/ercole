@@ -1,4 +1,4 @@
-# Ercole · FS-first Markdown Notes (JSON Index)
+# Ercole
 
 Ercole is a lightweight and portable system for managing Markdown notes with **YAML frontmatter**, indexed via a **derivable JSON index**.
 The filesystem is the *source of truth*: everything else (index, graph, statistics) can be regenerated at any time.
